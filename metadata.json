@@ -1,0 +1,7 @@
+{
+  "name": "The Price of E.G.G.S.",
+  "description": "Explore, Gather, Group, Save. An AI-powered shopping assistant that optimizes your grocery list across multiple local stores to find the lowest total price.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
