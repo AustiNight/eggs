@@ -1,0 +1,36 @@
+name: Deploy eggs-api
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'eggs-api/**'
+      - '.github/workflows/deploy-api.yml'
+
+jobs:
+  deploy:
+    name: Deploy Worker
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: eggs-api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: eggs-api/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          workingDirectory: eggs-api
+          command: deploy

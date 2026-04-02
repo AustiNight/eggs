@@ -1,0 +1,21 @@
+name = "eggs-api"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "914637fc5b194fbe89d5879179d6881b"
+
+[vars]
+FREE_MONTHLY_LIMIT = "3"
+
+# Secrets — set via: wrangler secret put <SECRET_NAME>
+# ANTHROPIC_API_KEY
+# CLERK_SECRET_KEY
+# SUPABASE_URL
+# SUPABASE_SERVICE_KEY
+# KROGER_CLIENT_ID
+# KROGER_CLIENT_SECRET
+# TAPESTRY_SERVICE_KEY
+# STRIPE_WEBHOOK_SECRET

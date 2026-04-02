@@ -1,0 +1,266 @@
+// ─── Hono app env (used everywhere) ──────────────────────────────────────────
+
+export type HonoEnv = {
+  Bindings: Env
+  Variables: { userId: string }
+}
+
+// ─── Env bindings ────────────────────────────────────────────────────────────
+
+export interface Env {
+  RATE_LIMIT_KV: KVNamespace
+  FREE_MONTHLY_LIMIT: string
+  ANTHROPIC_API_KEY: string
+  CLERK_SECRET_KEY: string
+  SUPABASE_URL: string
+  SUPABASE_SERVICE_KEY: string
+  KROGER_CLIENT_ID: string
+  KROGER_CLIENT_SECRET: string
+  TAPESTRY_SERVICE_KEY: string
+  STRIPE_WEBHOOK_SECRET: string
+}
+
+// ─── DB / User types ─────────────────────────────────────────────────────────
+
+export interface DbUser {
+  id: string
+  email: string
+  display_name: string | null
+  default_location_lat: number | null
+  default_location_lng: number | null
+  default_location_label: string | null
+  default_settings: Record<string, unknown>
+  avoid_stores: string[]
+  avoid_brands: string[]
+  ai_provider: string | null
+  subscription_tier: 'free' | 'pro'
+  subscription_status: string
+  subscription_period_end: string | null
+  stripe_customer_id: string | null
+  created_at: string
+}
+
+export interface DbEvent {
+  id: string
+  user_id: string
+  name: string
+  client_name: string | null
+  event_date: string | null
+  headcount: number
+  budget_mode: 'calculate' | 'ceiling'
+  budget_ceiling: number | null
+  status: EventStatus
+  created_at: string
+  updated_at: string
+}
+
+export type EventStatus =
+  | 'planning'
+  | 'shopping'
+  | 'reconcile_needed'
+  | 'complete'
+
+export interface DbDish {
+  id: string
+  event_id: string
+  user_id: string
+  name: string
+  servings: number | null
+  notes: string | null
+  sort_order: number
+  created_at: string
+}
+
+export interface DbIngredientPool {
+  id: string
+  event_id: string
+  user_id: string
+  name: string
+  clarified_name: string | null
+  quantity: number
+  unit: string
+  category: string
+  sources: IngredientSource[]
+  created_at: string
+}
+
+export interface DbShoppingPlan {
+  id: string
+  event_id: string | null
+  user_id: string
+  plan_data: ShoppingPlan
+  model_used: string | null
+  generated_at: string
+}
+
+export interface DbReconcileRecord {
+  id: string
+  event_id: string
+  shopping_plan_id: string | null
+  user_id: string
+  mode: 'receipt' | 'detailed'
+  actual_items: ActualItem[]
+  receipt_totals: ReceiptTotal[]
+  summary: ReconcileSummary | null
+  completed_at: string
+}
+
+// ─── Domain types ─────────────────────────────────────────────────────────────
+
+export interface IngredientLine {
+  id: string
+  name: string
+  clarifiedName?: string
+  quantity: number
+  unit: string
+  category: string
+  sources: IngredientSource[]
+}
+
+export interface IngredientSource {
+  dishId: string
+  dishName: string
+  quantity: number
+  unit: string
+  proportion: number
+}
+
+export interface ClarificationRequest {
+  itemId: string
+  originalName: string
+  question: string
+  options: string[]
+}
+
+export type PriceSource = 'kroger_api' | 'ai_estimated'
+export type Confidence = 'real' | 'estimated_with_source' | 'estimated'
+
+export interface StoreItem {
+  ingredientId: string
+  name: string
+  sku?: string
+  quantity: number
+  unit: string
+  unitPrice: number
+  lineTotal: number
+  confidence: Confidence
+  productUrl?: string
+  proofUrl?: string
+  isLoyaltyPrice: boolean
+  nonMemberPrice?: number
+}
+
+export interface StorePlan {
+  storeName: string
+  storeBanner: string
+  storeAddress?: string
+  distanceMiles?: number
+  storeType: 'physical' | 'delivery' | 'curbside'
+  priceSource: PriceSource
+  items: StoreItem[]
+  subtotal: number
+  estimatedTax: number
+  grandTotal: number
+}
+
+export interface ShoppingPlan {
+  id: string
+  generatedAt: string
+  meta: {
+    eventId?: string
+    eventName?: string
+    headcount?: number
+    location: { lat: number; lng: number; label?: string }
+    storesQueried: { name: string; source: PriceSource }[]
+    modelUsed: string
+    budgetMode: 'ceiling' | 'calculate'
+    budgetCeiling?: number
+    budgetExceeded?: boolean
+  }
+  ingredients: IngredientLine[]
+  stores: StorePlan[]
+  summary: {
+    subtotal: number
+    estimatedTax: number
+    total: number
+    estimatedSavings?: number
+    realPriceCount: number
+    estimatedPriceCount: number
+  }
+}
+
+// ─── Request / Response types ─────────────────────────────────────────────────
+
+export interface PlanSettings {
+  radiusMiles: number
+  maxStores: number
+  includeDelivery: boolean
+  curbsideMaxMiles?: number
+  avoidStores?: string[]
+  avoidBrands?: string[]
+}
+
+export interface PricePlanRequest {
+  ingredients: IngredientLine[]
+  resolvedClarifications?: Record<string, string>
+  location: { lat: number; lng: number }
+  settings: PlanSettings
+  budget?: { mode: 'ceiling' | 'calculate'; amount?: number }
+  eventId?: string
+  eventName?: string
+  headcount?: number
+}
+
+export interface ReconcileRequest {
+  shoppingPlanId: string
+  mode: 'receipt' | 'detailed'
+  receiptTotals?: ReceiptTotal[]
+  actualItems?: ActualItem[]
+}
+
+export interface ReceiptTotal {
+  storeName: string
+  receiptTotal: number
+}
+
+export interface ActualItem {
+  storeItemId: string
+  actualPrice: number
+  actualQuantity: number
+  note?: string
+}
+
+export interface ReconcileSummary {
+  estimatedTotal: number
+  actualTotal: number
+  variance: number
+  variancePct: number
+  perDishActual: { dish: string; actualCost: number; estimatedCost: number }[]
+}
+
+// ─── Kroger types ─────────────────────────────────────────────────────────────
+
+export interface KrogerProduct {
+  productId: string
+  description: string
+  brand: string
+  items: {
+    itemId: string
+    price?: { regular: number; promo?: number }
+    size: string
+    soldBy: string
+  }[]
+  images: { perspective: string; sizes: { size: string; url: string }[] }[]
+}
+
+export interface KrogerLocation {
+  locationId: string
+  name: string
+  address: {
+    addressLine1: string
+    city: string
+    state: string
+    zipCode: string
+  }
+  geolocation: { latitude: number; longitude: number }
+}
