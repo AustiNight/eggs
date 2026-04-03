@@ -125,7 +125,7 @@ export default function EventNew() {
               <input
                 type="date" value={eventDate} onChange={e => setEventDate(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-white text-sm focus:outline-none"
-                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155', colorScheme: 'dark' }}
               />
             </div>
           </div>
