@@ -6,10 +6,10 @@ import { listEvents, getMe } from '../lib/api'
 import type { EggsEvent, UserProfile } from '../types'
 
 const STATUS_CONFIG: Record<EggsEvent['status'], { label: string; color: string }> = {
-  planning:          { label: 'Draft',             color: '#94a3b8' },
-  shopping:          { label: 'Shopping',           color: '#fbbf24' },
-  reconcile_needed:  { label: 'Reconcile Needed',   color: '#fbbf24' },
-  complete:          { label: 'Complete',           color: '#22c55e' }
+  planning: { label: 'Draft', color: '#94a3b8' },
+  shopping: { label: 'Shopping', color: '#fbbf24' },
+  reconcile_needed: { label: 'Reconcile Needed', color: '#fbbf24' },
+  complete: { label: 'Complete', color: '#22c55e' }
 }
 
 function StatusPill({ status }: { status: EggsEvent['status'] }) {
@@ -27,16 +27,16 @@ function StatusPill({ status }: { status: EggsEvent['status'] }) {
 function EventCard({ event }: { event: EggsEvent }) {
   const navigate = useNavigate()
   const actionLabel: Record<EggsEvent['status'], string> = {
-    planning:         'Generate Plan →',
-    shopping:         'View Plan →',
+    planning: 'Generate Plan →',
+    shopping: 'View Plan →',
     reconcile_needed: 'Reconcile →',
-    complete:         'View Report →'
+    complete: 'View Report →'
   }
   const actionPath: Record<EggsEvent['status'], string> = {
-    planning:         `/events/${event.id}/shop`,
-    shopping:         `/events/${event.id}`,
+    planning: `/events/${event.id}/shop`,
+    shopping: `/events/${event.id}`,
     reconcile_needed: `/events/${event.id}/reconcile`,
-    complete:         `/events/${event.id}`
+    complete: `/events/${event.id}`
   }
 
   return (
@@ -202,11 +202,11 @@ export default function Dashboard() {
             )}
           </div>
           <button
-            onClick={() => navigate('/events/new')}
+            onClick={() => navigate('/plan')}
             className="flex items-center gap-2 px-4 py-3 rounded-xl font-semibold text-sm whitespace-nowrap"
             style={{ backgroundColor: '#fbbf24', color: '#0f172a', boxShadow: '0 0 18px rgba(251,191,36,0.45)' }}
           >
-            <Plus className="w-4 h-4" /> New Event
+            <Plus className="w-4 h-4" /> New Shopping List
           </button>
         </div>
 
