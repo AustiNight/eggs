@@ -83,9 +83,9 @@ export default function EventNew() {
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#0d1117' }}>
-      <header className="sticky top-0 z-10 px-4 py-3 flex items-center gap-3" style={{ backgroundColor: '#0d1117', borderBottom: '1px solid #30363d' }}>
-        <button onClick={() => navigate('/dashboard')} style={{ color: '#8b949e' }}>
+    <div className="min-h-screen" style={{ backgroundColor: '#0f172a' }}>
+      <header className="sticky top-0 z-10 px-4 py-3 flex items-center gap-3" style={{ backgroundColor: '#0f172a', borderBottom: '1px solid #334155' }}>
+        <button onClick={() => navigate('/dashboard')} style={{ color: '#94a3b8' }}>
           <ChevronLeft className="w-5 h-5" />
         </button>
         <span className="font-semibold text-white">New Event</span>
@@ -99,47 +99,47 @@ export default function EventNew() {
         )}
 
         {/* Event Details */}
-        <section className="rounded-xl p-5 space-y-4" style={{ backgroundColor: '#161b22', border: '1px solid #30363d' }}>
+        <section className="rounded-xl p-5 space-y-4" style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}>
           <h2 className="font-semibold text-white">Event Details</h2>
           <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: '#8b949e' }}>Event Name *</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: '#94a3b8' }}>Event Name *</label>
             <input
               type="text" required value={name} onChange={e => setName(e.target.value)}
               placeholder="e.g. Johnson Wedding Reception"
               className="w-full rounded-lg px-3 py-2 text-white text-sm focus:outline-none"
-              style={{ backgroundColor: '#0d1117', border: '1px solid #30363d' }}
+              style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: '#8b949e' }}>Client Name</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: '#94a3b8' }}>Client Name</label>
               <input
                 type="text" value={clientName} onChange={e => setClientName(e.target.value)}
                 placeholder="Optional"
                 className="w-full rounded-lg px-3 py-2 text-white text-sm focus:outline-none"
-                style={{ backgroundColor: '#0d1117', border: '1px solid #30363d' }}
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: '#8b949e' }}>Event Date</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: '#94a3b8' }}>Event Date</label>
               <input
                 type="date" value={eventDate} onChange={e => setEventDate(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-white text-sm focus:outline-none"
-                style={{ backgroundColor: '#0d1117', border: '1px solid #30363d' }}
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: '#8b949e' }}>Headcount *</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: '#94a3b8' }}>Headcount *</label>
             <input
               type="number" required min={1} value={headcount}
               onChange={e => setHeadcount(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-white text-sm focus:outline-none"
-              style={{ backgroundColor: '#0d1117', border: '1px solid #30363d' }}
+              style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-2" style={{ color: '#8b949e' }}>Budget</label>
+            <label className="block text-xs font-medium mb-2" style={{ color: '#94a3b8' }}>Budget</label>
             <div className="flex gap-2 mb-3">
               {(['calculate', 'ceiling'] as const).map(mode => (
                 <button
@@ -147,9 +147,9 @@ export default function EventNew() {
                   onClick={() => setBudgetMode(mode)}
                   className="flex-1 py-2 rounded-lg text-sm font-medium transition-colors"
                   style={{
-                    backgroundColor: budgetMode === mode ? '#f59e0b20' : '#0d1117',
-                    color: budgetMode === mode ? '#f59e0b' : '#8b949e',
-                    border: `1px solid ${budgetMode === mode ? '#f59e0b60' : '#30363d'}`
+                    backgroundColor: budgetMode === mode ? '#fbbf2420' : '#0f172a',
+                    color: budgetMode === mode ? '#fbbf24' : '#94a3b8',
+                    border: `1px solid ${budgetMode === mode ? '#fbbf2460' : '#334155'}`
                   }}
                 >
                   {mode === 'calculate' ? 'Calculate my cost' : 'I have a ceiling'}
@@ -162,16 +162,16 @@ export default function EventNew() {
                 onChange={e => setBudgetCeiling(e.target.value)}
                 placeholder="Budget ceiling ($)"
                 className="w-full rounded-lg px-3 py-2 text-white text-sm focus:outline-none"
-                style={{ backgroundColor: '#0d1117', border: '1px solid #30363d' }}
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
               />
             )}
           </div>
         </section>
 
         {/* Menu */}
-        <section className="rounded-xl p-5 space-y-3" style={{ backgroundColor: '#161b22', border: '1px solid #30363d' }}>
+        <section className="rounded-xl p-5 space-y-3" style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}>
           <h2 className="font-semibold text-white">Menu</h2>
-          <p className="text-xs" style={{ color: '#8b949e' }}>Just type the dish name — AI handles the rest.</p>
+          <p className="text-xs" style={{ color: '#94a3b8' }}>Just type the dish name — AI handles the rest.</p>
           {dishes.map((dish, i) => (
             <div key={dish.id} className="flex gap-2 items-center">
               <input
@@ -179,17 +179,17 @@ export default function EventNew() {
                 onChange={e => updateDish(dish.id, 'name', e.target.value)}
                 placeholder={`Dish ${i + 1} (e.g. Chicken Marsala)`}
                 className="flex-1 rounded-lg px-3 py-2 text-white text-sm focus:outline-none"
-                style={{ backgroundColor: '#0d1117', border: '1px solid #30363d' }}
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
               />
               <input
                 type="number" min={1} value={dish.servings}
                 onChange={e => updateDish(dish.id, 'servings', e.target.value)}
                 placeholder="servings"
                 className="w-24 rounded-lg px-3 py-2 text-white text-sm focus:outline-none"
-                style={{ backgroundColor: '#0d1117', border: '1px solid #30363d' }}
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
               />
               {dishes.length > 1 && (
-                <button type="button" onClick={() => removeDishRow(dish.id)} style={{ color: '#8b949e' }}>
+                <button type="button" onClick={() => removeDishRow(dish.id)} style={{ color: '#94a3b8' }}>
                   <X className="w-4 h-4" />
                 </button>
               )}
@@ -198,38 +198,38 @@ export default function EventNew() {
           <button
             type="button" onClick={addDishRow}
             className="flex items-center gap-1 text-sm font-medium"
-            style={{ color: '#f59e0b' }}
+            style={{ color: '#fbbf24' }}
           >
             <Plus className="w-4 h-4" /> Add another dish
           </button>
         </section>
 
         {/* Shopping Preferences */}
-        <section className="rounded-xl p-5 space-y-4" style={{ backgroundColor: '#161b22', border: '1px solid #30363d' }}>
+        <section className="rounded-xl p-5 space-y-4" style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}>
           <h2 className="font-semibold text-white">Shopping Preferences</h2>
           <div>
             <div className="flex justify-between text-xs mb-1">
-              <span style={{ color: '#8b949e' }}>Search Radius</span>
-              <span style={{ color: '#f59e0b' }}>{radius} mi</span>
+              <span style={{ color: '#94a3b8' }}>Search Radius</span>
+              <span style={{ color: '#fbbf24' }}>{radius} mi</span>
             </div>
             <input type="range" min={1} max={50} value={radius} onChange={e => setRadius(parseInt(e.target.value))}
-              className="w-full h-2 rounded-lg appearance-none cursor-pointer" style={{ accentColor: '#f59e0b' }} />
+              className="w-full h-2 rounded-lg appearance-none cursor-pointer" style={{ accentColor: '#fbbf24' }} />
           </div>
           <div>
             <div className="flex justify-between text-xs mb-1">
-              <span style={{ color: '#8b949e' }}>Max Stores</span>
-              <span style={{ color: '#f59e0b' }}>{maxStores}</span>
+              <span style={{ color: '#94a3b8' }}>Max Stores</span>
+              <span style={{ color: '#fbbf24' }}>{maxStores}</span>
             </div>
             <input type="range" min={1} max={5} value={maxStores} onChange={e => setMaxStores(parseInt(e.target.value))}
-              className="w-full h-2 rounded-lg appearance-none cursor-pointer" style={{ accentColor: '#f59e0b' }} />
+              className="w-full h-2 rounded-lg appearance-none cursor-pointer" style={{ accentColor: '#fbbf24' }} />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: '#8b949e' }}>Include Delivery</span>
+            <span className="text-xs" style={{ color: '#94a3b8' }}>Include Delivery</span>
             <button
               type="button"
               onClick={() => setIncludeDelivery(p => !p)}
               className="w-10 h-5 rounded-full relative transition-colors"
-              style={{ backgroundColor: includeDelivery ? '#f59e0b' : '#30363d' }}
+              style={{ backgroundColor: includeDelivery ? '#fbbf24' : '#334155' }}
             >
               <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${includeDelivery ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </button>
@@ -239,7 +239,7 @@ export default function EventNew() {
         <button
           type="submit" disabled={saving}
           className="w-full py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-opacity"
-          style={{ backgroundColor: '#f59e0b', color: '#0d1117', opacity: saving ? 0.7 : 1 }}
+          style={{ backgroundColor: '#fbbf24', color: '#0f172a', boxShadow: '0 0 18px rgba(251,191,36,0.45)', opacity: saving ? 0.7 : 1 }}
         >
           {saving ? 'Creating…' : <>Generate Shopping Plan <ChevronRight className="w-4 h-4" /></>}
         </button>

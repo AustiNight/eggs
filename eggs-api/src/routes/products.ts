@@ -1,12 +1,13 @@
 import { Hono } from 'hono'
 import type { HonoEnv } from '../types/index.js'
 import { requireAuth } from '../middleware/auth.js'
+import { rateLimit } from '../middleware/ratelimit.js'
 import { KrogerClient } from '../integrations/kroger.js'
 
 const products = new Hono<HonoEnv>()
 
 // GET /api/products/search?q=chicken+breast&locationId=12345
-products.get('/search', requireAuth, async (c) => {
+products.get('/search', requireAuth, rateLimit, async (c) => {
   const q = c.req.query('q')
   const locationId = c.req.query('locationId')
 

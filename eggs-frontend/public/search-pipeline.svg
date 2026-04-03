@@ -1,0 +1,344 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 2800" width="1400" height="2800" font-family="'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#0c1222"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="greenGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#16a34a"/>
+    </linearGradient>
+    <linearGradient id="blueGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="purpleGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrowGold" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrowWhite" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#22c55e"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#a855f7"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1400" height="2800" fill="url(#bgGrad)"/>
+
+  <!-- Title -->
+  <text x="700" y="50" text-anchor="middle" fill="#fbbf24" font-size="28" font-weight="700" filter="url(#softGlow)">E.G.G.S. Search Pipeline — End-to-End Technical Flow</text>
+  <text x="700" y="78" text-anchor="middle" fill="#94a3b8" font-size="14">9 ingredients · 819 S Van Buren Ave, Dallas TX 75208 · 10 mile radius</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 1: RECIPE SCALING -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <text x="60" y="130" fill="#fbbf24" font-size="18" font-weight="700">PHASE 1: RECIPE SCALING</text>
+  <text x="60" y="152" fill="#94a3b8" font-size="12">EventShop.tsx → POST /api/scale-recipes → Anthropic Claude Haiku 4.5</text>
+
+  <!-- User Input Box -->
+  <rect x="60" y="170" width="600" height="230" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="80" y="195" fill="#fbbf24" font-size="13" font-weight="600">USER INPUT (Event Dishes)</text>
+  <text x="80" y="220" fill="#cbd5e1" font-size="11">Event: "Margaret's Client Dinner" — 24 guests</text>
+  <text x="80" y="240" fill="#94a3b8" font-size="11">The 9 ingredient items are treated as a single "Shopping List" dish.</text>
+  <text x="80" y="260" fill="#94a3b8" font-size="11">Each item + quantity sent to Claude for normalization.</text>
+
+  <text x="90" y="288" fill="#cbd5e1" font-size="10" font-family="monospace">→ 1 gallon 2% milk</text>
+  <text x="90" y="303" fill="#cbd5e1" font-size="10" font-family="monospace">→ 24 eggs</text>
+  <text x="90" y="318" fill="#cbd5e1" font-size="10" font-family="monospace">→ 2 lbs flour</text>
+  <text x="90" y="333" fill="#cbd5e1" font-size="10" font-family="monospace">→ 1 box Kellogg's Rice Krispies</text>
+  <text x="90" y="348" fill="#cbd5e1" font-size="10" font-family="monospace">→ 1 loaf Mrs Baird's white bread</text>
+
+  <text x="370" y="288" fill="#cbd5e1" font-size="10" font-family="monospace">→ 1 package Gouda cheese</text>
+  <text x="370" y="303" fill="#cbd5e1" font-size="10" font-family="monospace">→ 3 bottles soy sauce</text>
+  <text x="370" y="318" fill="#cbd5e1" font-size="10" font-family="monospace">→ 3 lbs red seedless grapes</text>
+  <text x="370" y="333" fill="#cbd5e1" font-size="10" font-family="monospace">→ 1 jar peanut butter</text>
+
+  <!-- Arrow to AI -->
+  <line x1="360" y1="400" x2="360" y2="430" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowGold)"/>
+
+  <!-- AI Call Box -->
+  <rect x="60" y="435" width="600" height="160" rx="12" fill="#1e293b" stroke="#a855f7" stroke-width="1.5"/>
+  <rect x="60" y="435" width="600" height="28" rx="12" fill="#a855f720"/>
+  <text x="80" y="454" fill="#a855f7" font-size="13" font-weight="600">ANTHROPIC API CALL #1 — Recipe Scaling</text>
+  <text x="80" y="478" fill="#94a3b8" font-size="10">POST https://api.anthropic.com/v1/messages</text>
+  <text x="80" y="495" fill="#94a3b8" font-size="10">Model: claude-haiku-4-5 · Max tokens: 4096 · JSON mode: ON</text>
+  <text x="80" y="515" fill="#cbd5e1" font-size="10">System: "Professional culinary assistant — consolidate, normalize units, add prep waste"</text>
+  <text x="80" y="535" fill="#cbd5e1" font-size="10">Returns: IngredientLine[] with id (UUID), name, quantity, unit, category, sources[]</text>
+  <text x="80" y="555" fill="#22c55e" font-size="10" font-weight="600">Server assigns crypto.randomUUID() to each ingredient (prevents AI UUID collisions)</text>
+  <text x="80" y="575" fill="#94a3b8" font-size="10">Result persisted to Supabase ingredient_pool table if storeToIngredientPool=true</text>
+
+  <!-- Arrow -->
+  <line x1="360" y1="595" x2="360" y2="640" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowGold)"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 2: CLARIFICATION -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <text x="60" y="665" fill="#fbbf24" font-size="18" font-weight="700">PHASE 2: INGREDIENT CLARIFICATION</text>
+  <text x="60" y="687" fill="#94a3b8" font-size="12">EventShop.tsx → POST /api/clarify → Anthropic Claude Haiku 4.5</text>
+
+  <!-- AI Call Box -->
+  <rect x="60" y="700" width="600" height="150" rx="12" fill="#1e293b" stroke="#a855f7" stroke-width="1.5"/>
+  <rect x="60" y="700" width="600" height="28" rx="12" fill="#a855f720"/>
+  <text x="80" y="719" fill="#a855f7" font-size="13" font-weight="600">ANTHROPIC API CALL #2 — Clarify Ambiguities</text>
+  <text x="80" y="743" fill="#94a3b8" font-size="10">POST https://api.anthropic.com/v1/messages · claude-haiku-4-5 · 2048 tokens · JSON mode</text>
+  <text x="80" y="763" fill="#cbd5e1" font-size="10">Evaluates: "Does the spec change which SKU to buy?"</text>
+  <text x="80" y="783" fill="#cbd5e1" font-size="10">Example: "Peanut butter — Creamy or Crunchy?" options: ["Creamy", "Crunchy", "No preference"]</text>
+  <text x="80" y="803" fill="#cbd5e1" font-size="10">Example: "Soy sauce — Regular or Low Sodium?" options: ["Regular", "Low Sodium", "Tamari"]</text>
+  <text x="80" y="823" fill="#22c55e" font-size="10">Returns [] if all 9 ingredients are precise enough. User can also click "Skip" to proceed.</text>
+
+  <!-- Decision diamond -->
+  <polygon points="360,875 440,910 360,945 280,910" fill="#1e293b" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="360" y="914" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="600">Questions?</text>
+
+  <!-- No branch -->
+  <line x1="440" y1="910" x2="550" y2="910" stroke="#22c55e" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  <text x="490" y="903" fill="#22c55e" font-size="10" font-weight="600">No / Skip</text>
+
+  <!-- Yes branch -->
+  <line x1="360" y1="945" x2="360" y2="975" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowGold)"/>
+  <text x="375" y="963" fill="#fbbf24" font-size="10">Yes</text>
+
+  <!-- Modal box -->
+  <rect x="200" y="980" width="320" height="60" rx="8" fill="#1e293b" stroke="#fbbf24" stroke-width="1"/>
+  <text x="360" y="1005" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="600">ClarificationModal shown to user</text>
+  <text x="360" y="1025" text-anchor="middle" fill="#94a3b8" font-size="10">User selects options → resolvedClarifications map</text>
+
+  <!-- Merge -->
+  <line x1="360" y1="1040" x2="360" y2="1080" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowGold)"/>
+  <line x1="550" y1="910" x2="550" y2="1065" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <line x1="550" y1="1065" x2="375" y2="1065" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4 4"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 3: PRICE DISCOVERY -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <text x="60" y="1110" fill="#fbbf24" font-size="18" font-weight="700">PHASE 3: PRICE DISCOVERY</text>
+  <text x="60" y="1132" fill="#94a3b8" font-size="12">POST /api/price-plan → Kroger API (real prices) then Anthropic (fallback for misses)</text>
+
+  <!-- Step 3a: Kroger Location -->
+  <rect x="60" y="1150" width="620" height="100" rx="12" fill="#1e293b" stroke="#22c55e" stroke-width="1.5"/>
+  <rect x="60" y="1150" width="620" height="28" rx="12" fill="#22c55e20"/>
+  <text x="80" y="1169" fill="#22c55e" font-size="13" font-weight="600">KROGER API CALL #1 — Find Nearby Stores</text>
+  <text x="80" y="1193" fill="#94a3b8" font-size="10">GET https://api.kroger.com/v1/locations</text>
+  <text x="80" y="1210" fill="#94a3b8" font-size="10">Auth: Bearer token (OAuth2 client_credentials → product.compact scope)</text>
+  <text x="80" y="1227" fill="#cbd5e1" font-size="10">Params: filter.lat.near=32.7543 filter.lon.near=-96.8208 filter.radiusInMiles=10 filter.limit=5</text>
+  <text x="80" y="1244" fill="#22c55e" font-size="10">Returns: locationId, name, address for each Kroger/Tom Thumb in radius</text>
+
+  <!-- Arrow -->
+  <line x1="360" y1="1250" x2="360" y2="1280" stroke="#22c55e" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+  <!-- Step 3b: Kroger Product Search -->
+  <rect x="60" y="1285" width="620" height="240" rx="12" fill="#1e293b" stroke="#22c55e" stroke-width="1.5"/>
+  <rect x="60" y="1285" width="620" height="28" rx="12" fill="#22c55e20"/>
+  <text x="80" y="1304" fill="#22c55e" font-size="13" font-weight="600">KROGER API CALL #2-10 — Search Products (×9 in parallel)</text>
+  <text x="80" y="1328" fill="#94a3b8" font-size="10">GET https://api.kroger.com/v1/products?filter.term={name}&amp;filter.locationId={id}&amp;filter.limit=5</text>
+  <text x="80" y="1345" fill="#94a3b8" font-size="10">Promise.allSettled() — all 9 searches run simultaneously against primaryLocation</text>
+
+  <text x="80" y="1370" fill="#cbd5e1" font-size="11" font-weight="600">Per-ingredient search + result:</text>
+  <text x="90" y="1390" fill="#cbd5e1" font-size="9.5" font-family="monospace">"2% milk"           → Kroger 2% Reduced Fat Milk, 1 gal · $3.49 reg / $2.99 promo</text>
+  <text x="90" y="1405" fill="#cbd5e1" font-size="9.5" font-family="monospace">"eggs"              → Kroger Grade A Large Eggs, 24 ct · $4.99 reg</text>
+  <text x="90" y="1420" fill="#cbd5e1" font-size="9.5" font-family="monospace">"flour"             → Kroger All Purpose Flour, 5 lb · $2.99 reg</text>
+  <text x="90" y="1435" fill="#cbd5e1" font-size="9.5" font-family="monospace">"rice krispies"     → Kellogg's Rice Krispies, 12 oz · $4.29 reg</text>
+  <text x="90" y="1450" fill="#cbd5e1" font-size="9.5" font-family="monospace">"white bread"       → Mrs Baird's White Bread, 20 oz · $3.49 reg</text>
+  <text x="90" y="1465" fill="#cbd5e1" font-size="9.5" font-family="monospace">"gouda cheese"      → Kroger Gouda Cheese Slices, 7 oz · $3.99 reg</text>
+  <text x="90" y="1480" fill="#cbd5e1" font-size="9.5" font-family="monospace">"soy sauce"         → Kikkoman Soy Sauce, 15 oz · $3.29 reg</text>
+  <text x="90" y="1495" fill="#cbd5e1" font-size="9.5" font-family="monospace">"red grapes"        → Red Seedless Grapes · $2.49/lb reg</text>
+  <text x="90" y="1510" fill="#cbd5e1" font-size="9.5" font-family="monospace">"peanut butter"     → Jif Creamy Peanut Butter, 16 oz · $3.79 reg</text>
+
+  <!-- Confidence + URL explanation -->
+  <rect x="700" y="1150" width="640" height="375" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="720" y="1175" fill="#fbbf24" font-size="13" font-weight="600">HOW PRODUCT URLs AND PROOF LINKS ARE DETERMINED</text>
+
+  <text x="720" y="1205" fill="#22c55e" font-size="12" font-weight="700">KROGER API RESULTS (confidence: "real")</text>
+  <text x="720" y="1225" fill="#cbd5e1" font-size="10">productUrl built from Kroger response data:</text>
+  <text x="730" y="1245" fill="#94a3b8" font-size="9.5" font-family="monospace">const slug = product.description.toLowerCase()</text>
+  <text x="730" y="1260" fill="#94a3b8" font-size="9.5" font-family="monospace">  .replace(/[^a-z0-9]+/g, '-')</text>
+  <text x="730" y="1275" fill="#94a3b8" font-size="9.5" font-family="monospace">productUrl = `https://www.kroger.com/p/${slug}/${productId}`</text>
+  <text x="720" y="1300" fill="#22c55e" font-size="10" font-weight="600">proofUrl = productUrl (same link — Kroger product page IS the proof)</text>
+  <text x="720" y="1320" fill="#cbd5e1" font-size="10">Price data: regular + promo from Kroger's items[0].price object</text>
+  <text x="720" y="1340" fill="#cbd5e1" font-size="10">effectivePrice = promoPrice ?? regularPrice (promo preferred)</text>
+  <text x="720" y="1360" fill="#cbd5e1" font-size="10">isLoyaltyPrice = true when promoPrice &lt; regularPrice</text>
+
+  <line x1="720" y1="1380" x2="1320" y2="1380" stroke="#334155" stroke-width="1"/>
+
+  <text x="720" y="1405" fill="#fbbf24" font-size="12" font-weight="700">AI ESTIMATED RESULTS (confidence: "estimated" or "estimated_with_source")</text>
+  <text x="720" y="1425" fill="#cbd5e1" font-size="10">Claude is instructed to use web search to find actual prices.</text>
+  <text x="720" y="1445" fill="#cbd5e1" font-size="10">proofUrl = URL Claude actually visited and extracted price from.</text>
+  <text x="720" y="1465" fill="#cbd5e1" font-size="10">productUrl = retailer product page (may differ from proofUrl)</text>
+  <text x="720" y="1490" fill="#ef4444" font-size="10" font-weight="600">CRITICAL: Claude is told "NEVER fabricate a URL"</text>
+  <text x="720" y="1510" fill="#cbd5e1" font-size="10">If no real URL found → proofUrl omitted → confidence = "estimated"</text>
+
+  <!-- Arrow to AI fallback -->
+  <line x1="360" y1="1525" x2="360" y2="1560" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowGold)"/>
+
+  <!-- Decision: Kroger misses? -->
+  <polygon points="360,1570 450,1605 360,1640 270,1605" fill="#1e293b" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="360" y="1600" text-anchor="middle" fill="#fbbf24" font-size="9" font-weight="600">Kroger</text>
+  <text x="360" y="1615" text-anchor="middle" fill="#fbbf24" font-size="9" font-weight="600">misses?</text>
+
+  <!-- All found branch -->
+  <line x1="450" y1="1605" x2="580" y2="1605" stroke="#22c55e" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  <text x="500" y="1598" fill="#22c55e" font-size="10" font-weight="600">All 9 found</text>
+  <text x="590" y="1610" fill="#22c55e" font-size="11" font-weight="600">→ Skip AI</text>
+
+  <!-- Misses branch -->
+  <line x1="360" y1="1640" x2="360" y2="1670" stroke="#a855f7" stroke-width="2" marker-end="url(#arrowPurple)"/>
+  <text x="375" y="1660" fill="#a855f7" font-size="10">Some missing</text>
+
+  <!-- AI Fallback Box -->
+  <rect x="60" y="1680" width="620" height="180" rx="12" fill="#1e293b" stroke="#a855f7" stroke-width="1.5"/>
+  <rect x="60" y="1680" width="620" height="28" rx="12" fill="#a855f720"/>
+  <text x="80" y="1699" fill="#a855f7" font-size="13" font-weight="600">ANTHROPIC API CALL #3 — AI Price Search (Web Search Fallback)</text>
+  <text x="80" y="1723" fill="#94a3b8" font-size="10">POST https://api.anthropic.com/v1/messages · claude-haiku-4-5 · 6000 tokens · JSON mode</text>
+  <text x="80" y="1743" fill="#cbd5e1" font-size="10">System: "Professional grocery price research assistant — use web search for real prices"</text>
+  <text x="80" y="1763" fill="#cbd5e1" font-size="10">User: "GPS: 32.7543, -96.8208 · Radius: 10mi · Max stores: 3"</text>
+  <text x="80" y="1783" fill="#cbd5e1" font-size="10">"Find lowest prices for: [only ingredients Kroger missed]"</text>
+  <text x="80" y="1803" fill="#cbd5e1" font-size="10">Claude uses web search to visit retailer pages → returns StorePlan[] with prices + URLs</text>
+  <text x="80" y="1823" fill="#94a3b8" font-size="10">Confidence per item: "real" (confirmed from product page), "estimated_with_source" (URL found),</text>
+  <text x="80" y="1838" fill="#94a3b8" font-size="10">"estimated" (national average, no URL)</text>
+
+  <!-- Arrow to assembly -->
+  <line x1="360" y1="1860" x2="360" y2="1900" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowGold)"/>
+  <line x1="580" y1="1605" x2="580" y2="1885" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <line x1="580" y1="1885" x2="375" y2="1885" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4 4"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 4: PLAN ASSEMBLY -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <text x="60" y="1930" fill="#fbbf24" font-size="18" font-weight="700">PHASE 4: PLAN ASSEMBLY &amp; PERSISTENCE</text>
+
+  <rect x="60" y="1950" width="620" height="230" rx="12" fill="#1e293b" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="80" y="1975" fill="#fbbf24" font-size="13" font-weight="600">MERGE + ASSEMBLE ShoppingPlan</text>
+
+  <text x="80" y="2000" fill="#22c55e" font-size="11" font-weight="600">1. Kroger StorePlan (priority — added first)</text>
+  <text x="90" y="2018" fill="#cbd5e1" font-size="10">All 9 Kroger items → single StorePlan { storeName: "Tom Thumb #1234", priceSource: "kroger_api" }</text>
+  <text x="90" y="2035" fill="#cbd5e1" font-size="10">Each item: confidence="real", productUrl="https://kroger.com/p/...", proofUrl=same</text>
+  <text x="90" y="2052" fill="#cbd5e1" font-size="10">subtotal calculated, tax = subtotal × 0.0825 (hardcoded 8.25%), grandTotal = subtotal + tax</text>
+
+  <text x="80" y="2077" fill="#a855f7" font-size="11" font-weight="600">2. AI StorePlans (appended after Kroger)</text>
+  <text x="90" y="2095" fill="#cbd5e1" font-size="10">Only present if Kroger had misses. May contain 1-3 additional stores.</text>
+  <text x="90" y="2112" fill="#cbd5e1" font-size="10">Each item has its own confidence level and optional proofUrl.</text>
+
+  <text x="80" y="2137" fill="#fbbf24" font-size="11" font-weight="600">3. Enforce maxStores limit</text>
+  <text x="90" y="2155" fill="#cbd5e1" font-size="10">allStores.slice(0, settings.maxStores) — Kroger first, then AI stores up to limit.</text>
+
+  <text x="80" y="2175" fill="#3b82f6" font-size="11" font-weight="600">4. Persist to Supabase &amp; update event status</text>
+
+  <!-- Arrow to display -->
+  <line x1="360" y1="2180" x2="360" y2="2220" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowGold)"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 5: DISPLAY + CART -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <text x="60" y="2250" fill="#fbbf24" font-size="18" font-weight="700">PHASE 5: RESULTS DISPLAY &amp; CART LINKS</text>
+  <text x="60" y="2272" fill="#94a3b8" font-size="12">EventShop.tsx → PlanResults component → StoreCard components</text>
+
+  <!-- Results display -->
+  <rect x="60" y="2290" width="1280" height="260" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+
+  <!-- Store Card mock -->
+  <rect x="80" y="2310" width="580" height="220" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <text x="100" y="2335" fill="#22c55e" font-size="13" font-weight="600">Tom Thumb #1234 — Kroger API</text>
+  <text x="100" y="2353" fill="#94a3b8" font-size="10">4343 W Illinois Ave, Dallas TX · 0 mi · Physical</text>
+
+  <!-- Item rows -->
+  <rect x="95" y="2365" width="550" height="24" rx="4" fill="#1e293b"/>
+  <text x="105" y="2381" fill="#cbd5e1" font-size="10">Kroger 2% Milk, 1 gal</text>
+  <rect x="380" y="2369" width="65" height="16" rx="8" fill="#22c55e20" stroke="#22c55e40" stroke-width="0.5"/>
+  <text x="413" y="2381" text-anchor="middle" fill="#22c55e" font-size="8" font-weight="600">Kroger API</text>
+  <text x="470" y="2381" fill="#fbbf24" font-size="10" font-weight="600">$2.99</text>
+  <rect x="510" y="2369" width="55" height="16" rx="8" fill="#3b82f620" stroke="#3b82f640" stroke-width="0.5"/>
+  <text x="537" y="2381" text-anchor="middle" fill="#3b82f6" font-size="8" font-weight="600">Shop Link</text>
+
+  <rect x="95" y="2393" width="550" height="24" rx="4" fill="#0f172a"/>
+  <text x="105" y="2409" fill="#cbd5e1" font-size="10">Large Eggs, 24 ct</text>
+  <rect x="380" y="2397" width="65" height="16" rx="8" fill="#22c55e20" stroke="#22c55e40" stroke-width="0.5"/>
+  <text x="413" y="2409" text-anchor="middle" fill="#22c55e" font-size="8" font-weight="600">Kroger API</text>
+  <text x="470" y="2409" fill="#fbbf24" font-size="10" font-weight="600">$4.99</text>
+  <rect x="510" y="2397" width="55" height="16" rx="8" fill="#3b82f620" stroke="#3b82f640" stroke-width="0.5"/>
+  <text x="537" y="2409" text-anchor="middle" fill="#3b82f6" font-size="8" font-weight="600">Shop Link</text>
+
+  <rect x="95" y="2421" width="550" height="24" rx="4" fill="#1e293b"/>
+  <text x="105" y="2437" fill="#cbd5e1" font-size="10">Kellogg's Rice Krispies, 12 oz</text>
+  <rect x="380" y="2425" width="65" height="16" rx="8" fill="#22c55e20" stroke="#22c55e40" stroke-width="0.5"/>
+  <text x="413" y="2437" text-anchor="middle" fill="#22c55e" font-size="8" font-weight="600">Kroger API</text>
+  <text x="470" y="2437" fill="#fbbf24" font-size="10" font-weight="600">$4.29</text>
+  <rect x="510" y="2425" width="55" height="16" rx="8" fill="#3b82f620" stroke="#3b82f640" stroke-width="0.5"/>
+  <text x="537" y="2437" text-anchor="middle" fill="#3b82f6" font-size="8" font-weight="600">Shop Link</text>
+
+  <text x="105" y="2460" fill="#94a3b8" font-size="10">... 6 more items</text>
+
+  <rect x="95" y="2475" width="550" height="1" fill="#334155"/>
+  <text x="105" y="2497" fill="#94a3b8" font-size="11">Subtotal: $32.31 · Tax (8.25%): $2.67 ·</text>
+  <text x="370" y="2497" fill="#fbbf24" font-size="13" font-weight="700">Grand Total: $34.98</text>
+
+  <!-- Cart explanation -->
+  <rect x="700" y="2310" width="620" height="220" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <text x="720" y="2340" fill="#fbbf24" font-size="13" font-weight="700">CART / PURCHASE LINK BEHAVIOR</text>
+
+  <text x="720" y="2370" fill="#22c55e" font-size="11" font-weight="600">"Shop Link" (Kroger API items only)</text>
+  <text x="730" y="2390" fill="#cbd5e1" font-size="10">Opens kroger.com/p/{slug}/{productId} in new tab</text>
+  <text x="730" y="2408" fill="#cbd5e1" font-size="10">User must add to Kroger cart manually on kroger.com</text>
+  <text x="730" y="2426" fill="#ef4444" font-size="10" font-weight="600">No cart API integration — individual product links only</text>
+  <text x="730" y="2444" fill="#94a3b8" font-size="10">Links only shown when confidence === "real"</text>
+
+  <line x1="720" y1="2458" x2="1300" y2="2458" stroke="#334155" stroke-width="1"/>
+
+  <text x="720" y="2478" fill="#fbbf24" font-size="11" font-weight="600">"Source ↗" (AI estimated items only)</text>
+  <text x="730" y="2498" fill="#cbd5e1" font-size="10">Opens proofUrl (where Claude found the price) in new tab</text>
+  <text x="730" y="2516" fill="#94a3b8" font-size="10">Not a purchase link — informational source verification only</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- SUMMARY -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <rect x="60" y="2580" width="1280" height="190" rx="12" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="700" y="2610" text-anchor="middle" fill="#fbbf24" font-size="16" font-weight="700">TOTAL EXTERNAL API CALLS FOR THIS SEARCH</text>
+
+  <text x="100" y="2645" fill="#a855f7" font-size="12" font-weight="700">Anthropic (Claude Haiku 4.5)</text>
+  <text x="100" y="2665" fill="#cbd5e1" font-size="11">1. Scale recipes (4096 tokens)</text>
+  <text x="100" y="2683" fill="#cbd5e1" font-size="11">2. Clarify ingredients (2048 tokens)</text>
+  <text x="100" y="2701" fill="#cbd5e1" font-size="11">3. AI price search — only if Kroger misses (6000 tokens)</text>
+  <text x="100" y="2725" fill="#94a3b8" font-size="10">2-3 calls total · ~$0.003-0.008 per search</text>
+
+  <text x="500" y="2645" fill="#22c55e" font-size="12" font-weight="700">Kroger API</text>
+  <text x="500" y="2665" fill="#cbd5e1" font-size="11">1. OAuth2 token (if not cached)</text>
+  <text x="500" y="2683" fill="#cbd5e1" font-size="11">2. Find nearby locations (1 call)</text>
+  <text x="500" y="2701" fill="#cbd5e1" font-size="11">3. Product search × 9 (parallel)</text>
+  <text x="500" y="2725" fill="#94a3b8" font-size="10">10-11 calls total · Free tier</text>
+
+  <text x="900" y="2645" fill="#3b82f6" font-size="12" font-weight="700">Supabase (Postgres)</text>
+  <text x="900" y="2665" fill="#cbd5e1" font-size="11">1. Get user profile + subscription tier</text>
+  <text x="900" y="2683" fill="#cbd5e1" font-size="11">2. Save ingredient_pool (9 rows)</text>
+  <text x="900" y="2701" fill="#cbd5e1" font-size="11">3. Save shopping_plan (1 row, JSONB)</text>
+  <text x="900" y="2719" fill="#cbd5e1" font-size="11">4. Update event.status → "shopping"</text>
+  <text x="900" y="2743" fill="#94a3b8" font-size="10">~6 queries total</text>
+
+</svg>

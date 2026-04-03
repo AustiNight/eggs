@@ -79,8 +79,10 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
 
     const itemLines = needsAI.map(i => `- ${i.quantity} ${i.unit} ${i.name} (id: ${i.id})`).join('\n')
 
-    const aiResult = await provider.complete({
-      system: `You are a professional grocery price research assistant for event chefs.
+    let aiResult
+    try {
+      aiResult = await provider.complete({
+        system: `You are a professional grocery price research assistant for event chefs.
 Find real, current prices for the listed ingredients from local stores near the given location.
 You have web search access — use it to find actual product pages and current prices.
 
@@ -125,10 +127,10 @@ Return ONLY valid JSON matching this schema (no markdown):
     }
   ]
 }`,
-      messages: [
-        {
-          role: 'user',
-          content: `${addressLine}
+        messages: [
+          {
+            role: 'user',
+            content: `${addressLine}
 Search radius: ${body.settings.radiusMiles} miles
 Max stores: ${body.settings.maxStores}
 Include delivery: ${body.settings.includeDelivery}
@@ -141,17 +143,23 @@ ${itemLines}
 
 Priority: find the absolute lowest total cost. Assume loyalty card pricing at every chain.
 Tax rate: 8.25%.`
-        }
-      ],
-      maxTokens: 6000,
-      jsonMode: true
-    })
+          }
+        ],
+        maxTokens: 6000,
+        jsonMode: true
+      })
+    } catch (e) {
+      // AI call failed — continue with Kroger-only results
+      aiResult = null
+    }
 
-    try {
-      const parsed = JSON.parse(aiResult.content) as { stores: StorePlan[] }
-      aiStorePlans = parsed.stores ?? []
-    } catch {
-      // AI fallback failed — continue with Kroger-only results
+    if (aiResult) {
+      try {
+        const parsed = JSON.parse(aiResult.content) as { stores: StorePlan[] }
+        aiStorePlans = parsed.stores ?? []
+      } catch {
+        // AI returned invalid JSON — continue with Kroger-only results
+      }
     }
   }
 
@@ -213,6 +221,49 @@ Tax rate: 8.25%.`
   const realCount = allItems.filter(i => i.confidence === 'real').length
   const estimatedCount = allItems.filter(i => i.confidence !== 'real').length
 
+  // ── Narrative summary ────────────────────────────────────────────────────
+  // Generates the human-readable "why we chose these stores" paragraph
+  // shown in the results screen. Runs after plan is assembled, uses actual
+  // store/item data so the summary is grounded in the real results.
+
+  let planNarrative = ''
+  try {
+    const storeLines = finalStores.map(s => {
+      const itemCount = s.items.length
+      const source = s.priceSource === 'kroger_api' ? 'live Kroger API pricing' : 'AI-estimated pricing'
+      return `${s.storeName} (${itemCount} items, ${source}, subtotal $${s.subtotal.toFixed(2)})`
+    }).join('; ')
+
+    const totalItems = finalStores.flatMap(s => s.items).length
+    const budgetNote = body.budget?.mode === 'ceiling' && body.budget.amount
+      ? ` Budget ceiling was $${body.budget.amount.toFixed(2)} — plan ${total > body.budget.amount ? 'exceeded' : 'came in under'} at $${total.toFixed(2)}.`
+      : ''
+
+    const narrativePrompt = `You are the E.G.G.S. shopping agent. Write a 2-3 sentence summary explaining the shopping plan results below. Be specific about which stores were chosen and why. Mention if Kroger API provided real prices vs AI estimates. Be direct and helpful, not salesy.
+
+Plan results:
+- Stores: ${storeLines}
+- Total: $${total.toFixed(2)} (including ~8.25% tax)
+- ${realCount} of ${totalItems} item prices came from live Kroger API; the rest are AI estimates${budgetNote}
+- Search radius: ${body.settings.radiusMiles} miles, max ${body.settings.maxStores} stores
+
+Write only the summary paragraph, no preamble.`
+
+    const narrativeResult = await provider.complete({
+      system: 'You write concise, honest shopping plan summaries for a grocery price optimization tool.',
+      messages: [{ role: 'user', content: narrativePrompt }],
+      maxTokens: 200,
+      jsonMode: false
+    })
+
+    planNarrative = narrativeResult.content.trim()
+  } catch {
+    // Narrative is non-critical — fall back to a generated string
+    planNarrative = `Found lowest prices across ${finalStores.length} store${finalStores.length !== 1 ? 's' : ''} within ${body.settings.radiusMiles} miles. Prioritized lowest total cost with loyalty card pricing applied at every chain.`
+  }
+
+
+
   const shoppingPlan: ShoppingPlan = {
     id: crypto.randomUUID(),
     generatedAt: new Date().toISOString(),
@@ -232,6 +283,7 @@ Tax rate: 8.25%.`
     ingredients,
     stores: finalStores,
     summary: {
+      narrative: planNarrative,
       subtotal: Math.round(subtotal * 100) / 100,
       estimatedTax: Math.round(tax * 100) / 100,
       total,
@@ -241,7 +293,7 @@ Tax rate: 8.25%.`
   }
 
   // Persist plan
-  const { data: savedPlan } = await supabase
+  const { error: saveError } = await supabase
     .from('shopping_plans')
     .insert({
       id: shoppingPlan.id,
@@ -252,6 +304,10 @@ Tax rate: 8.25%.`
     })
     .select()
     .single()
+
+  if (saveError) {
+    return c.json({ error: 'Failed to save plan' }, 500)
+  }
 
   // If linked to event, transition to shopping status
   if (body.eventId) {

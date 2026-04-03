@@ -2,13 +2,14 @@ import { Hono } from 'hono'
 import type { HonoEnv, ClarificationRequest, IngredientLine } from '../types/index.js'
 import { getSupabase } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
+import { rateLimit } from '../middleware/ratelimit.js'
 import { getProvider } from '../providers/index.js'
 
 const clarify = new Hono<HonoEnv>()
 
 // POST /api/clarify
 // Input: { ingredients: IngredientLine[] }
-clarify.post('/', requireAuth, async (c) => {
+clarify.post('/', requireAuth, rateLimit, async (c) => {
   const userId = c.get('userId')
   const supabase = getSupabase(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY)
 
@@ -21,7 +22,9 @@ clarify.post('/', requireAuth, async (c) => {
     .map(i => `ID: "${i.id}" | ${i.quantity} ${i.unit} ${i.name}`)
     .join('\n')
 
-  const result = await provider.complete({
+  let result
+  try {
+    result = await provider.complete({
     system: `You are a grocery procurement assistant for professional event chefs.
 Your job is to identify ingredients that are vague enough to affect which specific product to buy and at what price.
 Return ONLY valid JSON: an array of ClarificationRequest objects, or an empty array if nothing is ambiguous.
@@ -43,6 +46,9 @@ Rules:
     maxTokens: 2048,
     jsonMode: true
   })
+  } catch (e) {
+    return c.json({ error: 'AI service unavailable' }, 503)
+  }
 
   let clarifications: ClarificationRequest[] | null = null
   try {

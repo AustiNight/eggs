@@ -2,6 +2,7 @@ import type {
   UserProfile,
   EggsEvent,
   EventDetail,
+  Dish,
   IngredientLine,
   ClarificationRequest,
   ShoppingPlan,
@@ -102,7 +103,7 @@ export const addDish = (
   eventId: string,
   dish: { name: string; servings?: number; notes?: string }
 ) =>
-  req<{ id: string; name: string }>(`/api/events/${eventId}/dishes`, {
+  req<Dish>(`/api/events/${eventId}/dishes`, {
     token,
     method: 'POST',
     body: JSON.stringify(dish)

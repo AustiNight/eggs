@@ -11,12 +11,13 @@ events.post('/', requireAuth, enforceFreeLimit, async (c) => {
   const userId = c.get('userId')
   const supabase = getSupabase(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY)
   const body = await c.req.json<Partial<DbEvent>>()
+  if (!body.name?.trim()) return c.json({ error: 'Event name is required' }, 400)
 
   const { data, error } = await supabase
     .from('events')
     .insert({
       user_id: userId,
-      name: body.name,
+      name: body.name.trim(),
       client_name: body.client_name ?? null,
       event_date: body.event_date ?? null,
       headcount: body.headcount ?? 1,
@@ -60,15 +61,21 @@ events.get('/:id', requireAuth, async (c) => {
     supabase.from('events').select('*').eq('id', eventId).eq('user_id', userId).single(),
     supabase.from('dishes').select('*').eq('event_id', eventId).eq('user_id', userId).order('sort_order'),
     supabase.from('ingredient_pool').select('*').eq('event_id', eventId).eq('user_id', userId),
-    supabase.from('shopping_plans').select('id, generated_at, model_used').eq('event_id', eventId).eq('user_id', userId).order('generated_at', { ascending: false }).limit(1)
+    supabase.from('shopping_plans').select('id, generated_at, model_used, plan_data').eq('event_id', eventId).eq('user_id', userId).order('generated_at', { ascending: false }).limit(1)
   ])
 
   if (!eventRes.data) return c.json({ error: 'Not found' }, 404)
 
+  // Map snake_case DB columns to camelCase for frontend IngredientLine type
+  const ingredients = (ingredientsRes.data ?? []).map((row: Record<string, unknown>) => ({
+    ...row,
+    clarifiedName: row.clarified_name ?? null
+  }))
+
   return c.json({
     event: eventRes.data,
     dishes: dishesRes.data ?? [],
-    ingredients: ingredientsRes.data ?? [],
+    ingredients,
     latestPlan: latestPlanRes.data?.[0] ?? null
   })
 })
@@ -115,6 +122,7 @@ events.post('/:id/dishes', requireAuth, async (c) => {
   if (!event) return c.json({ error: 'Event not found' }, 404)
 
   const body = await c.req.json<{ name: string; servings?: number; notes?: string }>()
+  if (!body.name?.trim()) return c.json({ error: 'Dish name is required' }, 400)
 
   const { count } = await supabase.from('dishes').select('*', { count: 'exact', head: true }).eq('event_id', eventId)
 
@@ -153,8 +161,8 @@ events.get('/:id/reconcile', requireAuth, async (c) => {
   const eventId = c.req.param('id')
   const supabase = getSupabase(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY)
 
-  const { data, error } = await supabase.from('reconcile_records').select('*').eq('event_id', eventId).eq('user_id', userId).order('completed_at', { ascending: false }).limit(1).single()
-  if (error || !data) return c.json({ error: 'Not found' }, 404)
+  const { data } = await supabase.from('reconcile_records').select('*').eq('event_id', eventId).eq('user_id', userId).order('completed_at', { ascending: false }).limit(1).maybeSingle()
+  if (!data) return c.json({ error: 'Not found' }, 404)
   return c.json(data)
 })
 

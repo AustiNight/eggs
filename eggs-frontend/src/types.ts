@@ -71,9 +71,9 @@ export interface PlanSettings {
   radiusMiles: number
   maxStores: number
   includeDelivery: boolean
-  curbsideMaxMiles: number
-  avoidStores: string[]
-  avoidBrands: string[]
+  curbsideMaxMiles?: number
+  avoidStores?: string[]
+  avoidBrands?: string[]
 }
 
 export interface StoreItem {
@@ -127,6 +127,7 @@ export interface ShoppingPlan {
     estimatedSavings?: number
     realPriceCount: number
     estimatedPriceCount: number
+    narrative?: string
   }
 }
 
@@ -151,7 +152,7 @@ export interface EventDetail {
   event: EggsEvent
   dishes: Dish[]
   ingredients: IngredientLine[]
-  latestPlan: { id: string; generated_at: string; model_used: string | null } | null
+  latestPlan: { id: string; generated_at: string; model_used: string | null; plan_data: ShoppingPlan } | null
 }
 
 // App flow state (for EventShop page)

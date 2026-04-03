@@ -186,6 +186,7 @@ export interface ShoppingPlan {
     estimatedSavings?: number
     realPriceCount: number
     estimatedPriceCount: number
+    narrative?: string
   }
 }
 

@@ -23,7 +23,9 @@ app.use(
         origin.includes('localhost') ||
         origin.includes('127.0.0.1') ||
         origin.endsWith('.pages.dev') ||
-        origin.endsWith('.eggs.app')
+        origin.endsWith('.eggs.app') ||
+        origin === 'https://priceofeggs.online' ||
+        origin === 'https://www.priceofeggs.online'
       ) {
         return origin
       }
@@ -44,6 +46,15 @@ app.route('/api/scale-recipes', scale)
 app.route('/api/clarify', clarify)
 app.route('/api/price-plan', plan)
 app.route('/api/products', products)
+
+// Global error handler — catch unhandled exceptions, malformed JSON, etc.
+app.onError((err, c) => {
+  console.error('Unhandled error:', err.message)
+  if (err.message.includes('Unexpected') || err.message.includes('JSON')) {
+    return c.json({ error: 'Invalid request body' }, 400)
+  }
+  return c.json({ error: 'Internal server error' }, 500)
+})
 
 // 404
 app.notFound((c) => c.json({ error: 'Not found' }, 404))

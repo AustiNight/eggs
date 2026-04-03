@@ -2,13 +2,14 @@ import { Hono } from 'hono'
 import type { HonoEnv, IngredientLine } from '../types/index.js'
 import { getSupabase } from '../db/client.js'
 import { requireAuth } from '../middleware/auth.js'
+import { rateLimit } from '../middleware/ratelimit.js'
 import { getProvider } from '../providers/index.js'
 
 const scale = new Hono<HonoEnv>()
 
 // POST /api/scale-recipes
 // Input: { dishes: [{id, name, servings}], eventId?, storeToIngredientPool?: boolean }
-scale.post('/', requireAuth, async (c) => {
+scale.post('/', requireAuth, rateLimit, async (c) => {
   const userId = c.get('userId')
   const supabase = getSupabase(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_KEY)
 
@@ -23,7 +24,9 @@ scale.post('/', requireAuth, async (c) => {
 
   const dishList = body.dishes.map(d => `- ${d.name} (${d.servings} servings)`).join('\n')
 
-  const result = await provider.complete({
+  let result
+  try {
+    result = await provider.complete({
     system: `You are a professional culinary assistant that converts dish lists into precise ingredient lists for event catering.
 Return ONLY valid JSON matching the schema below — no prose, no markdown fences.
 
@@ -58,12 +61,16 @@ Rules:
     maxTokens: 4096,
     jsonMode: true
   })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return c.json({ error: 'AI service unavailable: ' + msg }, 503)
+  }
 
   let ingredients: IngredientLine[]
   try {
     const parsed = JSON.parse(result.content) as { ingredients: IngredientLine[] }
-    // Assign fresh UUIDs to ensure uniqueness
-    ingredients = parsed.ingredients.map(i => ({ ...i, id: i.id || crypto.randomUUID() }))
+    // Always assign fresh UUIDs to prevent AI-generated collisions
+    ingredients = parsed.ingredients.map(i => ({ ...i, id: crypto.randomUUID() }))
   } catch {
     return c.json({ error: 'Failed to parse AI response' }, 500)
   }
@@ -85,7 +92,8 @@ Rules:
       sources: i.sources
     }))
 
-    await supabase.from('ingredient_pool').insert(rows)
+    const { error: poolError } = await supabase.from('ingredient_pool').insert(rows)
+    if (poolError) return c.json({ error: 'Failed to save ingredients: ' + poolError.message }, 500)
   }
 
   return c.json({ ingredients, modelUsed: result.model })
