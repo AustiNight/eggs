@@ -131,6 +131,16 @@ export interface ShoppingPlan {
   }
 }
 
+export interface ShoppingItem {
+  id: string
+  name: string
+  quantity: number
+  unit?: string
+  clarifiedName?: string
+  lastPurchased?: string
+}
+
+
 export interface ReconcileRecord {
   id: string
   event_id: string
