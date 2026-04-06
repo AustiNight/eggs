@@ -132,7 +132,7 @@ export interface ClarificationRequest {
   options: string[]
 }
 
-export type PriceSource = 'kroger_api' | 'ai_estimated'
+export type PriceSource = 'kroger_api' | 'walmart_api' | 'walgreens_api' | 'ai_estimated'
 export type Confidence = 'real' | 'estimated_with_source' | 'estimated'
 
 export interface StoreItem {
@@ -148,6 +148,8 @@ export interface StoreItem {
   proofUrl?: string
   isLoyaltyPrice: boolean
   nonMemberPrice?: number
+  /** True when this store doesn't carry the item — included to keep schema uniform across stores */
+  notAvailable?: boolean
 }
 
 export interface StorePlan {
@@ -237,6 +239,43 @@ export interface ReconcileSummary {
   variance: number
   variancePct: number
   perDishActual: { dish: string; actualCost: number; estimatedCost: number }[]
+}
+
+// ─── Open Food Facts types ────────────────────────────────────────────────────
+
+export interface OFFProduct {
+  barcode: string
+  name: string
+  brand: string
+  quantity: string
+  servingSize: string
+  imageUrl?: string
+  categories: string[]
+  allergens: string[]
+  ingredientsText?: string
+  /** NOVA processing level: 1 = unprocessed, 4 = ultra-processed */
+  novaGroup?: 1 | 2 | 3 | 4
+  /** Nutri-Score grade a–e (a is best) */
+  nutriscoreGrade?: 'a' | 'b' | 'c' | 'd' | 'e'
+  /** Eco-Score grade a–e (a is best) */
+  ecoscoreGrade?: 'a' | 'b' | 'c' | 'd' | 'e'
+  nutriments: {
+    energyKcal100g?: number
+    proteins100g?: number
+    carbohydrates100g?: number
+    fat100g?: number
+    fiber100g?: number
+    sugars100g?: number
+    salt100g?: number
+    sodium100g?: number
+  }
+}
+
+export interface OFFSearchResult {
+  products: OFFProduct[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 // ─── Kroger types ─────────────────────────────────────────────────────────────

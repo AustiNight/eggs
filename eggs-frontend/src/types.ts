@@ -1,7 +1,7 @@
 // Shared domain types — must stay in sync with eggs-api/src/types/index.ts
 
 export type EventStatus = 'planning' | 'shopping' | 'reconcile_needed' | 'complete'
-export type PriceSource = 'kroger_api' | 'ai_estimated'
+export type PriceSource = 'kroger_api' | 'walmart_api' | 'walgreens_api' | 'ai_estimated'
 export type Confidence = 'real' | 'estimated_with_source' | 'estimated'
 
 export interface UserProfile {
@@ -89,6 +89,13 @@ export interface StoreItem {
   proofUrl?: string
   isLoyaltyPrice: boolean
   nonMemberPrice?: number
+  notAvailable?: boolean
+}
+
+export interface ShoppingPlanRecord {
+  id: string
+  generated_at: string
+  plan_data: ShoppingPlan
 }
 
 export interface StorePlan {

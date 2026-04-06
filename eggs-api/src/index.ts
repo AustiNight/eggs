@@ -9,6 +9,8 @@ import scale from './routes/scale.js'
 import clarify from './routes/clarify.js'
 import plan from './routes/plan.js'
 import products from './routes/products.js'
+import foodfacts from './routes/foodfacts.js'
+import plans from './routes/plans.js'
 
 const app = new Hono<HonoEnv>()
 
@@ -46,6 +48,8 @@ app.route('/api/scale-recipes', scale)
 app.route('/api/clarify', clarify)
 app.route('/api/price-plan', plan)
 app.route('/api/products', products)
+app.route('/api/food', foodfacts)
+app.route('/api/plans', plans)
 
 // Global error handler — catch unhandled exceptions, malformed JSON, etc.
 app.onError((err, c) => {

@@ -6,6 +6,7 @@ import type {
   IngredientLine,
   ClarificationRequest,
   ShoppingPlan,
+  ShoppingPlanRecord,
   PlanSettings,
   ReconcileRecord
 } from '../types'
@@ -153,6 +154,11 @@ export const generatePlan = (token: string, input: PricePlanInput) =>
     method: 'POST',
     body: JSON.stringify(input)
   })
+
+// ─── Shopping Plans ───────────────────────────────────────────────────────────
+
+export const listShoppingPlans = (token: string) =>
+  req<{ plans: ShoppingPlanRecord[] }>('/api/plans', { token, method: 'GET' })
 
 // ─── Reconcile ────────────────────────────────────────────────────────────────
 

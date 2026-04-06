@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Zap, Check } from 'lucide-react'
 import ShoppingListInput from '../components/ShoppingListInput'
 import ClarificationModal from '../components/ClarificationModal'
 import LoadingState, { PlanStatus } from '../components/LoadingState'
 import PlanResult from '../components/PlanResult'
 import SettingsPanel from '../components/SettingsPanel'
-import { clarifyIngredients, generatePlan } from '../lib/api'
+import { clarifyIngredients, generatePlan, ApiError } from '../lib/api'
 import { saveToHistory } from '../services/storageService'
 import type { ShoppingPlan, PlanSettings, ClarificationRequest, IngredientLine } from '../types'
 
@@ -53,6 +53,7 @@ export default function Plan() {
   const [clarifications, setClarifications] = useState<ClarificationRequest[] | null>(null)
   const [plan, setPlan] = useState<ShoppingPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [limitReached, setLimitReached] = useState(false)
 
   const handleStartProcess = async () => {
     setError(null)
@@ -90,9 +91,10 @@ export default function Plan() {
   }
 
   const runPlan = async (ingredients: IngredientLine[], token: string) => {
-    setStatus('searching')
     saveToHistory(items)
 
+    // Phase 1: Geolocate + show store discovery state
+    setStatus('discovering')
     let lat = DEFAULT_LOCATION.lat
     let lng = DEFAULT_LOCATION.lng
     try {
@@ -103,8 +105,14 @@ export default function Plan() {
       lng = pos.coords.longitude
     } catch { /* use default */ }
 
-    await new Promise(r => setTimeout(r, 800))
-    setStatus('optimizing')
+    // Phase 2: Show parallel search state
+    await new Promise(r => setTimeout(r, 900))
+    setStatus('searching')
+
+    // Phase 3: Show optimizing while backend finalizes
+    // (Backend runs store discovery + parallel API+AI search + assembly)
+    // We transition to 'optimizing' after a short delay to reflect the backend phases
+    const optimizingTimer = setTimeout(() => setStatus('optimizing'), 4000)
 
     try {
       const result = await generatePlan(token, {
@@ -112,10 +120,16 @@ export default function Plan() {
         location: { lat, lng },
         settings
       })
+      clearTimeout(optimizingTimer)
       setPlan(result)
       setStatus('results')
     } catch (e) {
-      setError('Failed to generate a shopping plan. Please try again.')
+      clearTimeout(optimizingTimer)
+      if (e instanceof ApiError && e.status === 403) {
+        setLimitReached(true)
+      } else {
+        setError('Failed to generate a shopping plan. Please try again.')
+      }
       setStatus('error')
     }
   }
@@ -125,6 +139,7 @@ export default function Plan() {
     setItems([])
     setPlan(null)
     setError(null)
+    setLimitReached(false)
     setClarifications(null)
   }
 
@@ -155,7 +170,7 @@ export default function Plan() {
 
       <main className="pt-24 px-4 pb-12 max-w-4xl mx-auto">
 
-        {error && (
+        {error && !limitReached && (
           <div className="bg-red-500/10 border border-red-500/50 text-red-200 p-4 rounded-lg mb-6">
             {error}
           </div>
@@ -184,7 +199,7 @@ export default function Plan() {
           <ClarificationModal requests={clarifications} onComplete={handleClarificationComplete} />
         )}
 
-        {(status === 'analyzing' || status === 'searching' || status === 'optimizing') && (
+        {(status === 'analyzing' || status === 'discovering' || status === 'searching' || status === 'optimizing') && (
           <LoadingState status={status as PlanStatus} />
         )}
 
@@ -192,7 +207,57 @@ export default function Plan() {
           <PlanResult plan={plan} onReset={reset} />
         )}
 
-        {status === 'error' && (
+        {status === 'error' && limitReached && (
+          <div className="max-w-md mx-auto pt-8 space-y-6">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full mb-4"
+                style={{ backgroundColor: '#fbbf2420', border: '1px solid #fbbf2440' }}>
+                <Zap className="w-7 h-7" style={{ color: '#fbbf24' }} />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">You've hit your free limit</h2>
+              <p className="text-slate-400 text-sm">
+                Free accounts get 3 shopping plans per month. Upgrade to Pro for unlimited plans and priority pricing.
+              </p>
+            </div>
+
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #334155' }}>
+              <div className="grid grid-cols-2">
+                <div className="p-4" style={{ backgroundColor: '#1e293b' }}>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Free</p>
+                  {['3 plans / month', '3 lists / month', 'Kroger + AI pricing', 'Basic support'].map(f => (
+                    <div key={f} className="flex items-center gap-2 mb-2">
+                      <Check className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span className="text-xs text-slate-400">{f}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-4" style={{ backgroundColor: '#1a1f0a', borderLeft: '1px solid #fbbf2430' }}>
+                  <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: '#fbbf24' }}>Pro</p>
+                  {['Unlimited plans', 'Unlimited lists', 'All store integrations', 'Priority support'].map(f => (
+                    <div key={f} className="flex items-center gap-2 mb-2">
+                      <Check className="w-3.5 h-3.5 shrink-0" style={{ color: '#fbbf24' }} />
+                      <span className="text-xs text-white">{f}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => navigate('/settings')}
+              className="w-full py-3 rounded-xl font-bold text-sm transition-opacity hover:opacity-90"
+              style={{ backgroundColor: '#fbbf24', color: '#0f172a', boxShadow: '0 0 24px rgba(251,191,36,0.3)' }}
+            >
+              Upgrade to Pro
+            </button>
+
+            <button onClick={reset} className="w-full text-sm text-slate-500 hover:text-slate-300 transition-colors">
+              ← Back to my list
+            </button>
+          </div>
+        )}
+
+        {status === 'error' && !limitReached && (
           <div className="text-center pt-12">
             <button onClick={reset} className="text-sm text-slate-400 hover:text-white underline">
               ← Try again

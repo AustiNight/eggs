@@ -1,6 +1,6 @@
 import React from 'react'
-import { ShoppingPlan, StorePlan } from '../types'
-import { ShoppingCart, Car, DollarSign, ArrowRight, Activity, Globe, Tag, ExternalLink, FileText } from 'lucide-react'
+import { ShoppingPlan, StorePlan, StoreItem } from '../types'
+import { ShoppingCart, Car, DollarSign, ArrowRight, Activity, Globe, Tag, ExternalLink, FileText, AlertCircle } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 
 interface PlanResultProps {
@@ -9,6 +9,85 @@ interface PlanResultProps {
 }
 
 const COLORS = ['#fbbf24', '#f97316', '#34d399', '#60a5fa', '#a78bfa']
+
+const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
+  real:                   { label: 'Live',      color: '#34d399' },
+  estimated_with_source:  { label: 'Sourced',   color: '#fbbf24' },
+  estimated:              { label: 'Est.',       color: '#94a3b8' }
+}
+
+function ConfidenceBadge({ confidence }: { confidence: string }) {
+  const { label, color } = SOURCE_LABELS[confidence] ?? SOURCE_LABELS.estimated
+  return (
+    <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded"
+      style={{ color, backgroundColor: `${color}18`, border: `1px solid ${color}30` }}>
+      {label}
+    </span>
+  )
+}
+
+function ItemRow({ item }: { item: StoreItem }) {
+  if (item.notAvailable) {
+    return (
+      <tr className="opacity-40">
+        <td className="py-2.5 text-slate-400 italic">
+          <div className="flex items-center gap-1.5">
+            <AlertCircle className="w-3 h-3 text-slate-600 shrink-0" />
+            <span>{item.name}</span>
+          </div>
+        </td>
+        <td className="py-2.5 text-center text-slate-600 text-xs">—</td>
+        <td className="py-2.5 text-right text-slate-600 text-xs">Not carried</td>
+        <td className="py-2.5 text-center text-slate-600 text-xs">—</td>
+        <td className="py-2.5 text-right text-slate-600 text-xs">—</td>
+        <td className="py-2.5 text-right text-slate-600 text-xs">—</td>
+      </tr>
+    )
+  }
+
+  return (
+    <tr className="group">
+      <td className="py-3 text-slate-300 group-hover:text-white transition-colors">
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">{item.name}</span>
+          {item.isLoyaltyPrice && (
+            <span className="inline-flex w-fit items-center gap-1 text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30">
+              <Tag className="w-3 h-3" /> Member Price
+              {item.nonMemberPrice && item.nonMemberPrice > item.unitPrice && (
+                <span className="line-through text-slate-600 ml-1">${item.nonMemberPrice.toFixed(2)}</span>
+              )}
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="py-3 text-center text-slate-400">
+        {item.quantity} <span className="text-slate-600 text-xs">{item.unit}</span>
+      </td>
+      <td className="py-3 text-right font-mono text-amber-400/90 font-bold">
+        ${item.unitPrice.toFixed(2)}
+      </td>
+      <td className="py-3 text-center">
+        <ConfidenceBadge confidence={item.confidence} />
+      </td>
+      <td className="py-3 text-right">
+        {item.productUrl
+          ? <a href={item.productUrl} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline">
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          : <span className="text-xs text-slate-700">—</span>}
+      </td>
+      <td className="py-3 text-right">
+        {item.proofUrl
+          ? <a href={item.proofUrl} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded text-xs text-slate-300 transition-colors">
+              <FileText className="w-3 h-3" />
+            </a>
+          : <span className="text-xs text-slate-700">—</span>}
+      </td>
+    </tr>
+  )
+}
 
 const PlanResult: React.FC<PlanResultProps> = ({ plan, onReset }) => {
   const data = plan.stores.map(s => ({ name: s.storeName, value: s.subtotal }))
@@ -73,8 +152,11 @@ const PlanResult: React.FC<PlanResultProps> = ({ plan, onReset }) => {
                       {store.storeType === 'physical' ? <Car className="w-3 h-3" /> : <ShoppingCart className="w-3 h-3" />}
                       <span>{store.storeType}</span>
                       {store.distanceMiles != null && <span>· {store.distanceMiles.toFixed(1)} mi</span>}
-                      <span className={store.priceSource === 'kroger_api' ? 'text-emerald-400' : 'text-amber-400'}>
-                        · {store.priceSource === 'kroger_api' ? 'Live prices' : 'AI estimated'}
+                      <span className={store.priceSource === 'ai_estimated' ? 'text-amber-400' : 'text-emerald-400'}>
+                        · {store.priceSource === 'kroger_api' ? 'Live API'
+                          : store.priceSource === 'walmart_api' ? 'Live API'
+                          : store.priceSource === 'walgreens_api' ? 'Live API'
+                          : 'AI search'}
                       </span>
                     </div>
                   </div>
@@ -87,59 +169,27 @@ const PlanResult: React.FC<PlanResultProps> = ({ plan, onReset }) => {
               <div className="p-4 bg-slate-900/50">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-slate-500 border-b border-slate-800">
+                    <tr className="text-left text-slate-500 border-b border-slate-800 text-xs uppercase tracking-wide">
                       <th className="pb-2 font-medium">Item</th>
-                      <th className="pb-2 font-medium text-center">Qty</th>
-                      <th className="pb-2 font-medium text-right">Price</th>
-                      <th className="pb-2 font-medium text-right w-24">Proof</th>
+                      <th className="pb-2 font-medium text-center w-16">Qty</th>
+                      <th className="pb-2 font-medium text-right w-24">Unit Price</th>
+                      <th className="pb-2 font-medium text-center w-20">Source</th>
+                      <th className="pb-2 font-medium text-right w-20">Shop</th>
+                      <th className="pb-2 font-medium text-right w-20">Proof</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
                     {store.items.map((item, i) => (
-                      <tr key={i} className="group">
-                        <td className="py-3 text-slate-300 group-hover:text-white transition-colors">
-                          <div className="flex flex-col">
-                            <span className="font-medium">{item.name}</span>
-                            <div className="flex gap-3 items-center mt-1">
-                              {item.productUrl && (
-                                <a href={item.productUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline">
-                                  <ExternalLink className="w-3 h-3" /> Shop Link
-                                </a>
-                              )}
-                              {item.isLoyaltyPrice && (
-                                <span className="flex items-center gap-1 text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30">
-                                  <Tag className="w-3 h-3" /> Member Price
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3 text-center text-slate-400">{item.quantity}</td>
-                        <td className="py-3 text-right">
-                          <div className="flex flex-col items-end">
-                            <span className="font-mono text-amber-400/90 font-bold">${item.unitPrice.toFixed(2)}</span>
-                            {item.nonMemberPrice && item.nonMemberPrice > item.unitPrice && (
-                              <span className="text-[10px] text-slate-600 line-through">${item.nonMemberPrice.toFixed(2)}</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-3 text-right">
-                          {item.proofUrl
-                            ? <a href={item.proofUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded text-xs text-slate-300 transition-colors">
-                                <FileText className="w-3 h-3" /> Proof
-                              </a>
-                            : <span className="text-xs text-slate-600 italic">Unverified</span>}
-                        </td>
-                      </tr>
+                      <ItemRow key={i} item={item} />
                     ))}
                   </tbody>
                   <tfoot className="border-t border-slate-700/50">
                     <tr>
-                      <td colSpan={3} className="pt-3 text-right text-xs text-slate-500">Subtotal</td>
+                      <td colSpan={5} className="pt-3 text-right text-xs text-slate-500">Subtotal</td>
                       <td className="pt-3 text-right text-xs text-slate-500 font-mono">${store.subtotal.toFixed(2)}</td>
                     </tr>
                     <tr>
-                      <td colSpan={3} className="pt-1 text-right text-xs text-slate-500">Est. Tax (8.25%)</td>
+                      <td colSpan={5} className="pt-1 text-right text-xs text-slate-500">Est. Tax (8.25%)</td>
                       <td className="pt-1 text-right text-xs text-slate-500 font-mono">${store.estimatedTax.toFixed(2)}</td>
                     </tr>
                   </tfoot>

@@ -1,44 +1,63 @@
 import React, { useEffect, useState } from 'react'
-import { Loader2, BrainCircuit } from 'lucide-react'
+import { Loader2, BrainCircuit, MapPin } from 'lucide-react'
 
-export type PlanStatus = 'analyzing' | 'searching' | 'optimizing'
+export type PlanStatus = 'analyzing' | 'discovering' | 'searching' | 'optimizing'
 
 interface LoadingStateProps {
   status: PlanStatus
+}
+
+const MESSAGES: Record<PlanStatus, string[]> = {
+  analyzing: [
+    'Reading shopping list...',
+    'Identifying ambiguous items...',
+    'Checking for unit specifications...',
+    'Preparing clarification questions...',
+    'Validating item categories...',
+    'Cross-referencing common sizes...'
+  ],
+  discovering: [
+    'Locating stores within radius...',
+    'Filtering avoid lists...',
+    'Connecting to Kroger API...',
+    'Checking store availability...',
+    'Mapping nearby retailers...',
+    'Confirming store coverage...'
+  ],
+  searching: [
+    'Launching parallel price search...',
+    'Kroger API: querying live prices...',
+    'AI agent: scanning non-API stores...',
+    'Checking member/loyalty pricing...',
+    'Analyzing weekly flyers & digital coupons...',
+    'Searching delivery & curbside options...',
+    'Cross-checking item availability...',
+    'Collecting all price data...'
+  ],
+  optimizing: [
+    'Comparing prices across all sources...',
+    'Calculating taxes...',
+    'Sorting by lowest total cost...',
+    'Building per-store item lists...',
+    'Evaluating multi-store vs single-store...',
+    'Finalizing The Price of E.G.G.S....'
+  ]
+}
+
+const TITLES: Record<PlanStatus, string> = {
+  analyzing: 'Analyzing Requirements',
+  discovering: 'Finding Nearby Stores',
+  searching: 'Searching All Sources',
+  optimizing: 'Building Your Strategy'
 }
 
 const LoadingState: React.FC<LoadingStateProps> = ({ status }) => {
   const [logs, setLogs] = useState<string[]>([])
 
   useEffect(() => {
-    let messages: string[] = []
-
-    if (status === 'analyzing') {
-      messages = [
-        'Reading shopping list...',
-        'Identifying ambiguous items...',
-        'Checking for unit specifications...',
-        'Preparing clarification questions...',
-        'Validating item categories...',
-        'Cross-referencing common sizes...'
-      ]
-    } else {
-      messages = [
-        'Locating stores within radius...',
-        'Filtering avoid lists...',
-        'Checking Kroger API pricing...',
-        'Scanning nearby retailers...',
-        'Checking member/loyalty pricing...',
-        'Analyzing weekly flyers & digital coupons...',
-        'Calculating taxes...',
-        'Finding absolute lowest price per item...',
-        'Optimizing delivery vs pickup routes...',
-        'Finalizing The Price of E.G.G.S....'
-      ]
-    }
-
     let i = 0
     setLogs([])
+    const messages = MESSAGES[status]
 
     const interval = setInterval(() => {
       if (i < messages.length) {
@@ -51,12 +70,10 @@ const LoadingState: React.FC<LoadingStateProps> = ({ status }) => {
     return () => clearInterval(interval)
   }, [status])
 
-  const getTitle = () => {
-    switch (status) {
-      case 'analyzing': return 'Analyzing Requirements'
-      case 'searching': return 'Exploring the Market'
-      case 'optimizing': return 'Building Your Strategy'
-    }
+  const icon = () => {
+    if (status === 'analyzing') return <BrainCircuit className="w-12 h-12 text-amber-400 animate-pulse" />
+    if (status === 'discovering') return <MapPin className="w-12 h-12 text-amber-400 animate-pulse" />
+    return <Loader2 className="w-12 h-12 text-amber-400 animate-spin" />
   }
 
   return (
@@ -64,9 +81,7 @@ const LoadingState: React.FC<LoadingStateProps> = ({ status }) => {
       <div className="relative mb-12">
         <div className="absolute inset-0 bg-amber-500/20 blur-3xl rounded-full" />
         <div className="relative bg-slate-800 w-32 h-32 rounded-full flex items-center justify-center border border-slate-700 shadow-2xl">
-          {status === 'analyzing'
-            ? <BrainCircuit className="w-12 h-12 text-amber-400 animate-pulse" />
-            : <Loader2 className="w-12 h-12 text-amber-400 animate-spin" />}
+          {icon()}
         </div>
         <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-slate-900 px-4 py-1 rounded-full border border-slate-700 text-xs text-amber-400 font-mono whitespace-nowrap flex items-center gap-2">
           <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -74,7 +89,7 @@ const LoadingState: React.FC<LoadingStateProps> = ({ status }) => {
         </div>
       </div>
 
-      <h2 className="text-2xl font-bold text-white mb-8 text-center">{getTitle()}</h2>
+      <h2 className="text-2xl font-bold text-white mb-8 text-center">{TITLES[status]}</h2>
 
       <div className="w-full max-w-md">
         <div className="bg-slate-950 rounded-lg p-4 font-mono text-xs border border-slate-800 shadow-inner h-40 overflow-hidden flex flex-col-reverse">
