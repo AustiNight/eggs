@@ -1,0 +1,104 @@
+name: Nightly Regression
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 06:00 UTC = 01:00 CST / 02:00 CDT
+  workflow_dispatch:
+
+jobs:
+  # ── Full unit suite with coverage ───────────────────────────────────────────
+  unit-full:
+    name: Full Unit Suite + Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: API tests + coverage
+        working-directory: eggs-api
+        run: |
+          npm ci
+          npm run test:coverage
+
+      - name: Frontend tests + coverage
+        working-directory: eggs-frontend
+        run: |
+          npm ci
+          npm run test:coverage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nightly-coverage
+          path: |
+            eggs-api/coverage/
+            eggs-frontend/coverage/
+          retention-days: 30
+
+  # ── Full E2E regression — all browsers + mobile viewports ───────────────────
+  e2e-full:
+    name: Full E2E Regression
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium, firefox, webkit, mobile-chrome, mobile-safari]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps ${{ matrix.project == 'mobile-chrome' && 'chromium' || matrix.project == 'mobile-safari' && 'webkit' || matrix.project }}
+      - name: Run full E2E suite
+        run: npx playwright test --project=${{ matrix.project }}
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_PROD_URL }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-nightly-${{ matrix.project }}
+          path: playwright-report/
+          retention-days: 14
+
+  # ── Visual regression ────────────────────────────────────────────────────────
+  visual:
+    name: Visual Regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Visual snapshot comparison
+        run: npx playwright test --grep @visual --project=chromium
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_PROD_URL }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-diffs
+          path: test-results/
+          retention-days: 14
+
+  # ── Notify on failure ────────────────────────────────────────────────────────
+  notify:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [unit-full, e2e-full, visual]
+    if: failure()
+    steps:
+      - name: Log failure
+        run: echo "Nightly regression failed. Check artifacts for details."
+      # TODO: Add Slack/email notification here when comms tooling is set up

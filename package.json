@@ -1,0 +1,17 @@
+{
+  "name": "eggs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "E.G.G.S. monorepo — E2E tests and shared tooling",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:smoke": "playwright test --grep @smoke",
+    "test:api": "npm --prefix eggs-api run test",
+    "test:frontend": "npm --prefix eggs-frontend run test",
+    "test": "npm run test:api && npm run test:frontend"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
+  }
+}
