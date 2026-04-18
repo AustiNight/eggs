@@ -34,9 +34,11 @@ The prototype demonstrates the core AI loop: take a shopping list, clarify ambig
 - [ ] Multiple events in progress simultaneously
 
 **Price gathering (scraping-free):**
-- [ ] Kroger API integration (public, free, covers significant US market)
-- [ ] Walmart API integration (TBD availability)
-- [ ] Gemini search grounding for other stores (already in prototype — keep)
+- [x] Kroger API integration (public, free, covers significant US market)
+- [x] Walmart Affiliate API integration (RSA-signed, shipped 2026-04-18)
+- [x] Anthropic web_search + web_fetch tools for non-API stores with HEAD-validation + 24h KV cache (shipped 2026-04-18)
+- [x] Deterministic search-landing URL fallback per banner → guarantees a Shop link on every row
+- [ ] Instacart Developer Platform — deferred pending IDP access approval (requested 2026-04-18); covers Kroger/Albertsons/Publix/Aldi/Costco via a single API when approved
 - [ ] User price history — log what you actually paid, surface next time
 
 **Output and tracking:**

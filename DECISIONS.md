@@ -33,9 +33,29 @@ Cloudflare Pages (frontend) + Cloudflare Workers (API proxy, server-side price l
 
 ---
 
+## Integrations
+
+**[2026-04-18] Walgreens Developer API has no pricing endpoint — removed `walgreens_api` from PriceSource union**
+Verified against https://developer.walgreens.com/apis (April 2026): all six Walgreens API products (Store Inventory, Add to Cart, Photo Prints, Rx Refill/Transfer, Scheduling, Store Locator) return zero price data. Walgreens inventory endpoint returns `{id, s, q, ut}` — stock levels only. The aspirational `'walgreens_api'` PriceSource branch in types + frontend has been removed. If a pharmacy/OTC price source becomes necessary we will revisit via SerpAPI / DataForSEO scoped to `site:walgreens.com`.
+
+**[2026-04-18] Instacart Developer Platform integration deferred pending approval**
+Submitted IDP access request on 2026-04-18 with our use-case description (private event chefs, large scheduled baskets, high repeat frequency, no competing marketplace). Architecture and types not scaffolded until approval — avoiding premature commitment to endpoint shapes that may change. On approval, Instacart unlocks pricing for ~1,500 banners including Tom Thumb (Dallas) and Publix/Aldi/Costco nationally. Reference: https://docs.instacart.com/developer_platform_api/
+
+**[2026-04-18] URL guarantee architecture — web_search + web_fetch + HEAD validation + deterministic fallback**
+Root cause of the "AI stores have no Shop link" prod bug: the Anthropic provider previously called `/v1/messages` with no `tools` array. The prompt *claimed* "you have web search access" but the model was hallucinating or nulling URLs. Architecture now:
+1. Claude Haiku with `web_search_20260209` + `web_fetch_20260209` tools (GA). Free-tier cap: `max_uses: 25` ≈ $0.25/plan ceiling. Pro: 100.
+2. Server-side cross-reference: asserted `proofUrl`s must appear in the response's citation blocks.
+3. Server-side HEAD validation (`lib/url-validator.ts`): 3s timeout, falls back to GET-range on 405/403.
+4. Deterministic search-landing URL per banner (`integrations/store-urls.ts`): guarantees `shopUrl` is always a valid clickable link, even when Tier 1 returns nothing.
+5. Per-`(banner, ingredient)` KV cache with 24h TTL (`URL_CACHE` namespace): the second user searching the same item at the same banner within 24h pays $0 — no AI call, no web_search cost. Fire-and-forget writes via `c.executionCtx.waitUntil` so cache population doesn't block response.
+
+StoreItem contract now has `shopUrl: string` as the required, always-set Shop link. `proofUrl` remains optional, present only when web_search+web_fetch+HEAD-validation all pass. Deprecated `productUrl` is kept on the type for backward compatibility with plans already stored in Supabase.
+
+---
+
 ## Open Decisions
 
-- Which official grocery APIs to integrate first (Kroger API is confirmed public; Walmart TBD)
+- Which official grocery APIs to integrate next (Instacart on approval; Albertsons direct is covered by Instacart so deprioritized)
 - Whether to build recipe scaling from scratch or use a service/library
 - Pricing model: flat monthly ($19?) vs. per-event vs. freemium with paid event history
 - Mobile vs. web first — chefs shop on their phones

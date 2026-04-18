@@ -70,12 +70,15 @@ function ItemRow({ item }: { item: StoreItem }) {
         <ConfidenceBadge confidence={item.confidence} />
       </td>
       <td className="py-3 text-right">
-        {item.productUrl
-          ? <a href={item.productUrl} target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline">
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          : <span className="text-xs text-slate-700">—</span>}
+        {(() => {
+          const href = item.shopUrl ?? item.productUrl
+          return href
+            ? <a href={href} target="_blank" rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline">
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            : <span className="text-xs text-slate-700">—</span>
+        })()}
       </td>
       <td className="py-3 text-right">
         {item.proofUrl
@@ -92,7 +95,11 @@ function ItemRow({ item }: { item: StoreItem }) {
 const PlanResult: React.FC<PlanResultProps> = ({ plan, onReset }) => {
   const data = plan.stores.map(s => ({ name: s.storeName, value: s.subtotal }))
   const handleShopAll = (store: StorePlan) => {
-    store.items.forEach(item => { if (item.productUrl) window.open(item.productUrl, '_blank') })
+    store.items.forEach(item => {
+      if (item.notAvailable) return
+      const href = item.shopUrl ?? item.productUrl
+      if (href) window.open(href, '_blank')
+    })
   }
   const total = plan.summary.total
   const savings = plan.summary.estimatedSavings ?? 0
@@ -155,7 +162,6 @@ const PlanResult: React.FC<PlanResultProps> = ({ plan, onReset }) => {
                       <span className={store.priceSource === 'ai_estimated' ? 'text-amber-400' : 'text-emerald-400'}>
                         · {store.priceSource === 'kroger_api' ? 'Live API'
                           : store.priceSource === 'walmart_api' ? 'Live API'
-                          : store.priceSource === 'walgreens_api' ? 'Live API'
                           : 'AI search'}
                       </span>
                     </div>

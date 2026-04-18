@@ -1,6 +1,6 @@
 # E.G.G.S. Test Coverage Matrix
 
-**Last updated:** 2026-04-06  
+**Last updated:** 2026-04-18  
 **Rule:** Every new feature or change that may impact automated testing must update this file — even if the automation isn't written yet. The matrix is the source of truth for what tests *should* exist.
 
 ---
@@ -115,11 +115,52 @@
 | Rate limiter: under limit → passes | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/ratelimit.test.ts` | 📋 Needs KV mock |
 | Rate limiter: at limit → 429 | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/ratelimit.test.ts` | 📋 |
 | Store discovery: finds Kroger locations | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 Mock Kroger client |
-| Parallel search: Kroger + AI run simultaneously | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
+| Parallel search: Kroger + Walmart + AI run simultaneously | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
 | Not-available padding: all ingredients present in every store | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
 | Plan persisted to Supabase on success | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
 | Event transitions to 'shopping' when plan linked | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
 | maxStores limit enforced in result | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
+
+---
+
+## Walmart Affiliate API Integration
+
+| Test Case | Type | Web | MWeb | iOS | And | File | Notes |
+|-----------|------|-----|------|-----|-----|------|-------|
+| PEM parser: strips armor and decodes base64 body | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/walmart.test.ts` | 🟡 |
+| signHeaders: produces 4 WM_* headers | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/walmart.test.ts` | 🟡 |
+| signHeaders: canonical string uses alphabetical header order | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/walmart.test.ts` | 🟡 |
+| signHeaders: caches imported CryptoKey across calls | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/walmart.test.ts` | 🟡 |
+| getPriceForIngredient: maps first hit with URL | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/walmart.test.ts` | 🟡 |
+| getPriceForIngredient: returns null when 5xx | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/walmart.test.ts` | 🟡 |
+| getPriceForIngredient: skips items without productUrl | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/walmart.test.ts` | 🟡 |
+| plan.ts: Walmart StorePlan assembled with priceSource 'walmart_api' | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
+| plan.ts: Walmart and Kroger run in parallel (both in Promise.allSettled) | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
+
+---
+
+## URL Guarantee (shopUrl + proofUrl)
+
+| Test Case | Type | Web | MWeb | iOS | And | File | Notes |
+|-----------|------|-----|------|-----|-----|------|-------|
+| getShopUrl: known banner returns correct template | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/store-urls.test.ts` | 🟡 |
+| getShopUrl: case-insensitive banner matching | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/store-urls.test.ts` | 🟡 |
+| getShopUrl: unknown banner → Google fallback | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/store-urls.test.ts` | 🟡 |
+| getShopUrl: percent-encodes special chars | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/store-urls.test.ts` | 🟡 |
+| validateUrl: HEAD 2xx → true | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/url-validator.test.ts` | 🟡 |
+| validateUrl: HEAD 404 → false | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/url-validator.test.ts` | 🟡 |
+| validateUrl: HEAD 405 → retries GET-range | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/url-validator.test.ts` | 🟡 |
+| validateUrl: timeout → false | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/url-validator.test.ts` | 🟡 |
+| validateUrl: rejects malformed URL without fetch | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/url-validator.test.ts` | 🟡 |
+| validateUrls: deduplicates + returns verified Set | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/url-validator.test.ts` | 🟡 |
+| plan.ts: every item in response has a non-null shopUrl | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
+| plan.ts: fabricated URL (not in citations) is dropped + confidence downgraded | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
+| plan.ts: citation URL + HEAD-ok becomes proofUrl with confidence real | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
+| plan.ts: 2nd request for same (banner, ingredient) within 24h uses cache (no AI call) | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
+| plan.ts: KV cache writes are fire-and-forget (do not block response) | Integration | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/__tests__/plan.test.ts` | 📋 |
+| Frontend: Shop button renders for every item (including padded not-available rows) | E2E | 📋 | 📋 | 📋 | 📋 | `e2e/plan-flow.spec.ts` | Includes AI-sourced stores |
+| Frontend: Proof button renders only when proofUrl present | Unit | 🟡 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/PlanResult.test.tsx` | |
+| Frontend: Shop All uses shopUrl (falls back to productUrl for legacy plans) | Unit | 📋 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/PlanResult.test.tsx` | |
 
 ---
 

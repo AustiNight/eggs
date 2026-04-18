@@ -7,6 +7,13 @@ compatibility_flags = ["nodejs_compat"]
 binding = "RATE_LIMIT_KV"
 id = "914637fc5b194fbe89d5879179d6881b"
 
+# Per-(banner, ingredient) resolved StoreItem cache, 24h TTL.
+# Create via: wrangler kv namespace create URL_CACHE
+# Then paste the returned id below (replace REPLACE_WITH_KV_ID).
+[[kv_namespaces]]
+binding = "URL_CACHE"
+id = "REPLACE_WITH_KV_ID"
+
 [vars]
 FREE_MONTHLY_LIMIT = "3"
 
@@ -17,5 +24,9 @@ FREE_MONTHLY_LIMIT = "3"
 # SUPABASE_SERVICE_KEY
 # KROGER_CLIENT_ID
 # KROGER_CLIENT_SECRET
+# WALMART_CONSUMER_ID         # UUID from walmart.io registration
+# WALMART_KEY_VERSION         # e.g. "1"
+# WALMART_PRIVATE_KEY         # unencrypted PKCS#8 PEM (decrypt walmart_rsa_key first)
+# WALMART_PUBLISHER_ID        # Impact Radius Publisher ID
 # TAPESTRY_SERVICE_KEY
 # STRIPE_WEBHOOK_SECRET

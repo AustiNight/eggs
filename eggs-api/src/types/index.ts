@@ -9,6 +9,8 @@ export type HonoEnv = {
 
 export interface Env {
   RATE_LIMIT_KV: KVNamespace
+  /** Per-(banner,ingredient) resolved StoreItem cache with 24h TTL. */
+  URL_CACHE: KVNamespace
   FREE_MONTHLY_LIMIT: string
   ANTHROPIC_API_KEY: string
   CLERK_SECRET_KEY: string
@@ -16,6 +18,10 @@ export interface Env {
   SUPABASE_SERVICE_KEY: string
   KROGER_CLIENT_ID: string
   KROGER_CLIENT_SECRET: string
+  WALMART_CONSUMER_ID: string
+  WALMART_KEY_VERSION: string
+  WALMART_PRIVATE_KEY: string
+  WALMART_PUBLISHER_ID: string
   TAPESTRY_SERVICE_KEY: string
   STRIPE_WEBHOOK_SECRET: string
 }
@@ -132,7 +138,7 @@ export interface ClarificationRequest {
   options: string[]
 }
 
-export type PriceSource = 'kroger_api' | 'walmart_api' | 'walgreens_api' | 'ai_estimated'
+export type PriceSource = 'kroger_api' | 'walmart_api' | 'ai_estimated'
 export type Confidence = 'real' | 'estimated_with_source' | 'estimated'
 
 export interface StoreItem {
@@ -144,8 +150,17 @@ export interface StoreItem {
   unitPrice: number
   lineTotal: number
   confidence: Confidence
-  productUrl?: string
+  /**
+   * REQUIRED — always a valid clickable URL. For direct-API stores this is the
+   * real product page. For AI-sourced items it's the verified product page when
+   * retrieval + HEAD-validation succeed, otherwise a deterministic search-landing
+   * URL at the retailer's own site (see integrations/store-urls.ts).
+   */
+  shopUrl: string
+  /** Present only when the retrieved URL was cross-referenced against citations AND HEAD-resolved. */
   proofUrl?: string
+  /** @deprecated Mirrors `proofUrl` when present; kept for backward compat with stored plans. */
+  productUrl?: string
   isLoyaltyPrice: boolean
   nonMemberPrice?: number
   /** True when this store doesn't carry the item — included to keep schema uniform across stores */
@@ -155,6 +170,8 @@ export interface StoreItem {
 export interface StorePlan {
   storeName: string
   storeBanner: string
+  /** Normalized lowercase banner key used for URL templating and cache keys. */
+  storeBannerNormalized?: string
   storeAddress?: string
   distanceMiles?: number
   storeType: 'physical' | 'delivery' | 'curbside'
@@ -303,4 +320,33 @@ export interface KrogerLocation {
     zipCode: string
   }
   geolocation: { latitude: number; longitude: number }
+}
+
+// ─── Walmart types ────────────────────────────────────────────────────────────
+
+export interface WalmartProduct {
+  itemId: string | number
+  name?: string
+  brandName?: string
+  msrp?: number
+  salePrice?: number
+  productUrl?: string
+  productTrackingUrl?: string
+  size?: string
+  thumbnailImage?: string
+  largeImage?: string
+  categoryPath?: string
+  gtin?: string
+  upc?: string
+}
+
+export interface WalmartLocation {
+  storeId: string | number
+  name: string
+  streetAddress?: string
+  city?: string
+  stateProvCode?: string
+  zip?: string
+  latitude?: number
+  longitude?: number
 }

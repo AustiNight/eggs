@@ -1,7 +1,7 @@
 // Shared domain types — must stay in sync with eggs-api/src/types/index.ts
 
 export type EventStatus = 'planning' | 'shopping' | 'reconcile_needed' | 'complete'
-export type PriceSource = 'kroger_api' | 'walmart_api' | 'walgreens_api' | 'ai_estimated'
+export type PriceSource = 'kroger_api' | 'walmart_api' | 'ai_estimated'
 export type Confidence = 'real' | 'estimated_with_source' | 'estimated'
 
 export interface UserProfile {
@@ -85,8 +85,11 @@ export interface StoreItem {
   unitPrice: number
   lineTotal: number
   confidence: Confidence
-  productUrl?: string
+  /** REQUIRED for new plans — guaranteed valid clickable URL. Older stored plans may be missing this. */
+  shopUrl?: string
   proofUrl?: string
+  /** @deprecated mirrored from proofUrl when present; older plans used this as the shop link. */
+  productUrl?: string
   isLoyaltyPrice: boolean
   nonMemberPrice?: number
   notAvailable?: boolean
@@ -101,6 +104,7 @@ export interface ShoppingPlanRecord {
 export interface StorePlan {
   storeName: string
   storeBanner: string
+  storeBannerNormalized?: string
   storeAddress?: string
   distanceMiles?: number
   storeType: 'physical' | 'delivery' | 'curbside'
