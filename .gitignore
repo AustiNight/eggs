@@ -23,3 +23,5 @@ dist-ssr
 *.sln
 *.sw?
 walmart_*
+setup-staging-secrets.sh
+setup-prod-secrets.sh
