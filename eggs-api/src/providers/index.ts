@@ -8,8 +8,12 @@ import { OpenAIProvider } from './openai.js'
  * (e.g. `web_search_20260209`, `web_fetch_20260209`) and any tool-specific options.
  */
 export interface AnthropicTool {
-  type: string
+  /** Server tools carry a versioned type identifier (e.g. 'web_search_20260209'). Omit for client (custom) tools. */
+  type?: string
   name: string
+  description?: string
+  /** JSON Schema for client tool input. Required on custom tools, omitted on server tools. */
+  input_schema?: Record<string, unknown>
   max_uses?: number
   allowed_domains?: string[]
   blocked_domains?: string[]
@@ -25,12 +29,19 @@ export interface Citation {
   citedText?: string
 }
 
+/** A client-tool invocation made by the model (used for structured output). */
+export interface ClientToolCall {
+  id: string
+  name: string
+  input: unknown
+}
+
 export interface CompletionParams {
   system: string
   messages: { role: 'user' | 'assistant'; content: string }[]
   maxTokens?: number
   jsonMode?: boolean
-  /** Server-side tools (e.g. web_search, web_fetch). Incompatible with jsonMode prefill. */
+  /** Server-side tools (e.g. web_search, web_fetch) and/or client tools for structured output. */
   tools?: AnthropicTool[]
 }
 
@@ -40,6 +51,10 @@ export interface CompletionResult {
   usage: { inputTokens: number; outputTokens: number }
   /** URLs the model retrieved via web_search / web_fetch, when tools were enabled. */
   citations?: Citation[]
+  /** Client-side tool calls the model made — used for structured output extraction. */
+  toolCalls?: ClientToolCall[]
+  /** The model's stop reason, e.g. 'tool_use' when a client tool was invoked. */
+  stopReason?: string
 }
 
 export interface ModelProvider {

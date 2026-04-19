@@ -133,63 +133,94 @@ async function searchNonApiStores(
   const isPro = user?.subscription_tier === 'pro'
   const maxSearches = isPro ? 100 : 25
 
-  // allowed_callers: ['direct'] is required for claude-haiku-4-5 — Haiku does not
-  // support programmatic tool calling (code_execution calling other tools).
+  // Server tools need allowed_callers: ['direct'] for Haiku. Client tool
+  // record_shopping_plan is how the model emits structured output — removing
+  // "write JSON in prose" entirely. Parsing tool_use.input is always valid JSON.
   const tools: AnthropicTool[] = [
     { type: 'web_search_20260209', name: 'web_search', max_uses: maxSearches, allowed_callers: ['direct'] },
-    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: Math.floor(maxSearches / 2), allowed_callers: ['direct'] }
+    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: Math.floor(maxSearches / 2), allowed_callers: ['direct'] },
+    {
+      name: 'record_shopping_plan',
+      description: 'Record the final shopping plan after all research is complete. Call this EXACTLY ONCE as the last action of your turn, after you have finished using web_search and web_fetch. The input must include every store you found with every ingredient priced.',
+      input_schema: {
+        type: 'object',
+        required: ['stores'],
+        properties: {
+          stores: {
+            type: 'array',
+            description: 'One entry per grocery store you found. Include ALL stores in the area, not just the cheapest.',
+            items: {
+              type: 'object',
+              required: ['storeName', 'storeBanner', 'storeType', 'priceSource', 'items', 'subtotal', 'estimatedTax', 'grandTotal'],
+              properties: {
+                storeName: { type: 'string', description: 'Display name of this specific store, e.g. "Tom Thumb #3421"' },
+                storeBanner: { type: 'string', description: 'Retailer brand name, e.g. "Tom Thumb", "Target", "H-E-B"' },
+                storeBannerNormalized: { type: 'string', description: 'Lowercase key with no geography/address, e.g. "tom thumb", "target", "heb"' },
+                storeAddress: { type: 'string' },
+                distanceMiles: { type: 'number' },
+                storeType: { type: 'string', enum: ['physical', 'delivery', 'curbside'] },
+                priceSource: { type: 'string', enum: ['ai_estimated'], description: 'Always "ai_estimated" for this tool.' },
+                items: {
+                  type: 'array',
+                  description: 'One entry per ingredient from the user\'s list.',
+                  items: {
+                    type: 'object',
+                    required: ['ingredientId', 'name', 'quantity', 'unit', 'unitPrice', 'lineTotal', 'confidence', 'isLoyaltyPrice'],
+                    properties: {
+                      ingredientId: { type: 'string', description: 'The id of the ingredient from the user\'s input list.' },
+                      name: { type: 'string', description: 'Name of the product you found, e.g. "Driscoll\'s Basil 0.5oz"' },
+                      sku: { type: ['string', 'null'] },
+                      quantity: { type: 'number' },
+                      unit: { type: 'string' },
+                      unitPrice: { type: 'number' },
+                      lineTotal: { type: 'number' },
+                      confidence: {
+                        type: 'string',
+                        enum: ['real', 'estimated_with_source', 'estimated'],
+                        description: '"real" only if you web_fetched the product page and confirmed the price on the page. "estimated_with_source" if web_search found a URL but you could not web_fetch to confirm. "estimated" if no source URL at all.'
+                      },
+                      proofUrl: {
+                        type: ['string', 'null'],
+                        description: 'A URL returned by web_search or web_fetch. NEVER fabricate. NEVER use a search-results page. Leave null if no tool call returned a real product URL for this item.'
+                      },
+                      isLoyaltyPrice: { type: 'boolean' },
+                      nonMemberPrice: { type: ['number', 'null'] }
+                    }
+                  }
+                },
+                subtotal: { type: 'number' },
+                estimatedTax: { type: 'number' },
+                grandTotal: { type: 'number' }
+              }
+            }
+          }
+        }
+      }
+    }
   ]
 
   let aiResult
   try {
     aiResult = await provider.complete({
       system: `You are a professional grocery price research assistant for event chefs.
-Use the web_search tool to find current prices for ALL listed ingredients across grocery stores near the given location.
-When a web_search result looks promising, use web_fetch to load the actual product page and confirm the price and URL.
-Search MULTIPLE stores and return a separate entry per store.${excludeLine}
+
+WORKFLOW:
+1. Use the web_search tool to find current prices for the listed ingredients across grocery stores near the given location. Search MULTIPLE stores — return a separate entry per store.${excludeLine}
+2. When a search result looks promising, use web_fetch to load the actual product page and confirm the price and URL.
+3. After all research is complete, call the record_shopping_plan tool EXACTLY ONCE with your findings. This is how you emit your final answer — do not narrate the plan in text.
 
 CONFIDENCE RULES (strict):
 - "real": you web_fetched the product page and the price is on the page you fetched
-- "estimated_with_source": web_search returned a URL but you could not web_fetch it to confirm
+- "estimated_with_source": web_search returned a URL but you could not web_fetch to confirm
 - "estimated": no source URL at all — use a national average estimate (price only, no URL)
 
 PROOF URL RULES (strict):
-- proofUrl MUST be a URL returned by web_search or web_fetch — NEVER construct, guess, or infer one
-- If no tool call returned a URL for an ingredient, leave proofUrl null
-- Never fabricate a URL. Never use a search-results page as proofUrl.
+- proofUrl MUST be a URL returned by web_search or web_fetch — NEVER construct, guess, or infer
+- NEVER use a search-results page as proofUrl
+- Leave proofUrl null when no tool call produced a real product URL
 
-Return ONLY valid JSON matching this schema (no markdown, no code fence):
-{
-  "stores": [
-    {
-      "storeName": string,
-      "storeBanner": string,
-      "storeBannerNormalized": string (lowercase key like "tom thumb", "target"; no geography or addresses),
-      "storeAddress": string,
-      "distanceMiles": number,
-      "storeType": "physical"|"delivery"|"curbside",
-      "priceSource": "ai_estimated",
-      "items": [
-        {
-          "ingredientId": string,
-          "name": string,
-          "sku": string|null,
-          "quantity": number,
-          "unit": string,
-          "unitPrice": number,
-          "lineTotal": number,
-          "confidence": "real"|"estimated_with_source"|"estimated",
-          "proofUrl": string|null,
-          "isLoyaltyPrice": boolean,
-          "nonMemberPrice": number|null
-        }
-      ],
-      "subtotal": number,
-      "estimatedTax": number,
-      "grandTotal": number
-    }
-  ]
-}`,
+If an item isn't carried at a store, still include it: unitPrice 0, confidence "estimated", note the unavailability in the name field.
+Assume loyalty/member pricing where available. Tax rate: 8.25%.`,
       messages: [
         {
           role: 'user',
@@ -201,16 +232,12 @@ ${avoidStores.length ? `DO NOT include these stores: ${avoidStores.join(', ')}` 
 ${avoidBrands.length ? `DO NOT include these brands: ${avoidBrands.join(', ')}` : ''}
 ${body.eventName ? `Event: ${body.eventName} (${body.headcount ?? '?'} guests)` : ''}
 
-Search ALL non-API stores in the area for EVERY ingredient below. Return ALL stores you find, not just the cheapest:
-${itemLines}
-
-For each store, find prices for every item. If an item isn't carried, include it with unitPrice: 0 and confidence: "estimated" and a note in the name field.
-Assume loyalty/member card pricing where available.
-Tax rate: 8.25%.`
+Research these ingredients across all non-API grocery stores in the area, then call record_shopping_plan with the full per-store breakdown:
+${itemLines}`
         }
       ],
       maxTokens: 8000,
-      jsonMode: false,  // tools are incompatible with Anthropic's jsonMode prefill
+      jsonMode: false,
       tools
     })
   } catch (err) {
@@ -222,21 +249,22 @@ Tax rate: 8.25%.`
     console.error('[searchNonApiStores] provider returned no result')
     return []
   }
-  const raw = aiResult.content
-  console.log('[searchNonApiStores] AI returned', raw.length, 'chars;', aiResult.citations?.length ?? 0, 'citations')
-  // Tool-mode responses are free-text; extract the first top-level JSON object.
-  const jsonMatch = raw.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    console.error('[searchNonApiStores] no JSON object found in AI response. First 500 chars:', raw.slice(0, 500))
+
+  console.log('[searchNonApiStores] stopReason:', aiResult.stopReason,
+    '| text chars:', aiResult.content.length,
+    '| citations:', aiResult.citations?.length ?? 0,
+    '| toolCalls:', aiResult.toolCalls?.length ?? 0)
+
+  // Structured output: pull stores from the record_shopping_plan tool_use block.
+  const recordCall = aiResult.toolCalls?.find(tc => tc.name === 'record_shopping_plan')
+  if (!recordCall) {
+    console.error('[searchNonApiStores] model did not call record_shopping_plan. Text preview:',
+      aiResult.content.slice(0, 300))
     return []
   }
-  let parsed: { stores?: StorePlan[] }
-  try {
-    parsed = JSON.parse(jsonMatch[0]) as { stores?: StorePlan[] }
-  } catch {
-    return []
-  }
-  const stores = parsed.stores ?? []
+  const input = recordCall.input as { stores?: StorePlan[] } | null
+  const stores = input?.stores ?? []
+  console.log('[searchNonApiStores] record_shopping_plan returned', stores.length, 'stores')
 
   // Cross-reference asserted proofUrls against the citations the model actually
   // retrieved. Anything not in citations is presumed fabricated.
