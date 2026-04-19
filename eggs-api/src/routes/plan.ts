@@ -133,94 +133,94 @@ async function searchNonApiStores(
   const isPro = user?.subscription_tier === 'pro'
   const maxSearches = isPro ? 100 : 25
 
-  // Server tools need allowed_callers: ['direct'] for Haiku. Client tool
-  // record_shopping_plan is how the model emits structured output — removing
-  // "write JSON in prose" entirely. Parsing tool_use.input is always valid JSON.
-  const tools: AnthropicTool[] = [
+  // Two-pass architecture:
+  //   Pass 1 — RESEARCH. Web tools enabled, NO record tool. Model does free-form
+  //            research and emits a plain-text summary. Often ends with
+  //            stop_reason=end_turn which is fine here.
+  //   Pass 2 — FORMAT. ONLY the record_shopping_plan client tool is offered,
+  //            and tool_choice forces it. Model has only one thing it can do:
+  //            emit the structured plan. Citations from pass 1 are handed to
+  //            pass 2 verbatim so the model can attach real proofUrls.
+  //
+  // Why two passes: Haiku non-deterministically narrates-instead-of-finishes
+  // when tools+client-tool share a single call. Forcing the client tool as the
+  // ONLY option in pass 2 eliminates the failure mode.
+  const researchTools: AnthropicTool[] = [
     { type: 'web_search_20260209', name: 'web_search', max_uses: maxSearches, allowed_callers: ['direct'] },
-    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: Math.floor(maxSearches / 2), allowed_callers: ['direct'] },
-    {
-      name: 'record_shopping_plan',
-      description: 'Record the final shopping plan after all research is complete. Call this EXACTLY ONCE as the last action of your turn, after you have finished using web_search and web_fetch. The input must include every store you found with every ingredient priced.',
-      input_schema: {
-        type: 'object',
-        required: ['stores'],
-        properties: {
-          stores: {
-            type: 'array',
-            description: 'One entry per grocery store you found. Include ALL stores in the area, not just the cheapest.',
-            items: {
-              type: 'object',
-              required: ['storeName', 'storeBanner', 'storeType', 'priceSource', 'items', 'subtotal', 'estimatedTax', 'grandTotal'],
-              properties: {
-                storeName: { type: 'string', description: 'Display name of this specific store, e.g. "Tom Thumb #3421"' },
-                storeBanner: { type: 'string', description: 'Retailer brand name, e.g. "Tom Thumb", "Target", "H-E-B"' },
-                storeBannerNormalized: { type: 'string', description: 'Lowercase key with no geography/address, e.g. "tom thumb", "target", "heb"' },
-                storeAddress: { type: 'string' },
-                distanceMiles: { type: 'number' },
-                storeType: { type: 'string', enum: ['physical', 'delivery', 'curbside'] },
-                priceSource: { type: 'string', enum: ['ai_estimated'], description: 'Always "ai_estimated" for this tool.' },
+    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: Math.floor(maxSearches / 2), allowed_callers: ['direct'] }
+  ]
+
+  const recordShoppingPlanTool: AnthropicTool = {
+    name: 'record_shopping_plan',
+    description: 'Emit the final structured shopping plan.',
+    input_schema: {
+      type: 'object',
+      required: ['stores'],
+      properties: {
+        stores: {
+          type: 'array',
+          description: 'One entry per grocery store found. Include ALL stores — not just the cheapest.',
+          items: {
+            type: 'object',
+            required: ['storeName', 'storeBanner', 'storeType', 'priceSource', 'items', 'subtotal', 'estimatedTax', 'grandTotal'],
+            properties: {
+              storeName: { type: 'string' },
+              storeBanner: { type: 'string', description: 'Retailer brand, e.g. "Tom Thumb", "Target", "H-E-B"' },
+              storeBannerNormalized: { type: 'string', description: 'Lowercase key with no geography, e.g. "tom thumb", "target"' },
+              storeAddress: { type: 'string' },
+              distanceMiles: { type: 'number' },
+              storeType: { type: 'string', enum: ['physical', 'delivery', 'curbside'] },
+              priceSource: { type: 'string', enum: ['ai_estimated'] },
+              items: {
+                type: 'array',
                 items: {
-                  type: 'array',
-                  description: 'One entry per ingredient from the user\'s list.',
-                  items: {
-                    type: 'object',
-                    required: ['ingredientId', 'name', 'quantity', 'unit', 'unitPrice', 'lineTotal', 'confidence', 'isLoyaltyPrice'],
-                    properties: {
-                      ingredientId: { type: 'string', description: 'The id of the ingredient from the user\'s input list.' },
-                      name: { type: 'string', description: 'Name of the product you found, e.g. "Driscoll\'s Basil 0.5oz"' },
-                      sku: { type: ['string', 'null'] },
-                      quantity: { type: 'number' },
-                      unit: { type: 'string' },
-                      unitPrice: { type: 'number' },
-                      lineTotal: { type: 'number' },
-                      confidence: {
-                        type: 'string',
-                        enum: ['real', 'estimated_with_source', 'estimated'],
-                        description: '"real" only if you web_fetched the product page and confirmed the price on the page. "estimated_with_source" if web_search found a URL but you could not web_fetch to confirm. "estimated" if no source URL at all.'
-                      },
-                      proofUrl: {
-                        type: ['string', 'null'],
-                        description: 'A URL returned by web_search or web_fetch. NEVER fabricate. NEVER use a search-results page. Leave null if no tool call returned a real product URL for this item.'
-                      },
-                      isLoyaltyPrice: { type: 'boolean' },
-                      nonMemberPrice: { type: ['number', 'null'] }
-                    }
+                  type: 'object',
+                  required: ['ingredientId', 'name', 'quantity', 'unit', 'unitPrice', 'lineTotal', 'confidence', 'isLoyaltyPrice'],
+                  properties: {
+                    ingredientId: { type: 'string' },
+                    name: { type: 'string' },
+                    sku: { type: ['string', 'null'] },
+                    quantity: { type: 'number' },
+                    unit: { type: 'string' },
+                    unitPrice: { type: 'number' },
+                    lineTotal: { type: 'number' },
+                    confidence: { type: 'string', enum: ['real', 'estimated_with_source', 'estimated'] },
+                    proofUrl: { type: ['string', 'null'], description: 'Must be one of the citation URLs from the research pass. Never fabricate.' },
+                    isLoyaltyPrice: { type: 'boolean' },
+                    nonMemberPrice: { type: ['number', 'null'] }
                   }
-                },
-                subtotal: { type: 'number' },
-                estimatedTax: { type: 'number' },
-                grandTotal: { type: 'number' }
-              }
+                }
+              },
+              subtotal: { type: 'number' },
+              estimatedTax: { type: 'number' },
+              grandTotal: { type: 'number' }
             }
           }
         }
       }
     }
-  ]
+  }
 
-  let aiResult
+  // ── Pass 1 — Research ──────────────────────────────────────────────────────
+  let researchResult
   try {
-    aiResult = await provider.complete({
+    researchResult = await provider.complete({
       system: `You are a professional grocery price research assistant for event chefs.
 
-WORKFLOW:
-1. Use the web_search tool to find current prices for the listed ingredients across grocery stores near the given location. Search MULTIPLE stores — return a separate entry per store.${excludeLine}
-2. When a search result looks promising, use web_fetch to load the actual product page and confirm the price and URL.
-3. After all research is complete, call the record_shopping_plan tool EXACTLY ONCE with your findings. This is how you emit your final answer — do not narrate the plan in text.
+TASK: research current prices for the listed ingredients across grocery stores near the given location. Use the web_search tool to find candidates; use web_fetch to confirm prices on actual product pages.
 
-CONFIDENCE RULES (strict):
-- "real": you web_fetched the product page and the price is on the page you fetched
-- "estimated_with_source": web_search returned a URL but you could not web_fetch to confirm
-- "estimated": no source URL at all — use a national average estimate (price only, no URL)
+${excludeLine}
 
-PROOF URL RULES (strict):
-- proofUrl MUST be a URL returned by web_search or web_fetch — NEVER construct, guess, or infer
-- NEVER use a search-results page as proofUrl
-- Leave proofUrl null when no tool call produced a real product URL
+REPORT FORMAT (plain text, one store per section):
+Store: <banner name>
+Address/Distance: <if known>
+- <ingredient id> | <product name> | $<unit price> | <URL from web_search or web_fetch — NEVER fabricate>
+  (mark confidence: "real" if web_fetched, "estimated_with_source" if web_search only, "estimated" if no URL)
+- ...
 
-If an item isn't carried at a store, still include it: unitPrice 0, confidence "estimated", note the unavailability in the name field.
-Assume loyalty/member pricing where available. Tax rate: 8.25%.`,
+Include ALL stores you find. If an item isn't carried at a store, still list it with price 0 and a "NOT CARRIED" note.
+Assume loyalty/member pricing. Tax rate 8.25%.
+Do NOT emit JSON. Just plain-text per-store findings.`,
       messages: [
         {
           role: 'user',
@@ -232,47 +232,98 @@ ${avoidStores.length ? `DO NOT include these stores: ${avoidStores.join(', ')}` 
 ${avoidBrands.length ? `DO NOT include these brands: ${avoidBrands.join(', ')}` : ''}
 ${body.eventName ? `Event: ${body.eventName} (${body.headcount ?? '?'} guests)` : ''}
 
-Research these ingredients across all non-API grocery stores in the area, then call record_shopping_plan with the full per-store breakdown:
+Ingredients:
 ${itemLines}`
         }
       ],
       maxTokens: 8000,
       jsonMode: false,
-      tools
+      tools: researchTools
     })
   } catch (err) {
-    console.error('[searchNonApiStores] provider.complete threw:', err instanceof Error ? err.message : err)
+    console.error('[searchNonApiStores pass1] provider.complete threw:', err instanceof Error ? err.message : err)
     return []
   }
 
-  if (!aiResult) {
-    console.error('[searchNonApiStores] provider returned no result')
+  if (!researchResult) {
+    console.error('[searchNonApiStores pass1] provider returned no result')
     return []
   }
 
-  console.log('[searchNonApiStores] stopReason:', aiResult.stopReason,
-    '| text chars:', aiResult.content.length,
-    '| citations:', aiResult.citations?.length ?? 0,
-    '| toolCalls:', aiResult.toolCalls?.length ?? 0)
+  console.log('[searchNonApiStores pass1] stopReason:', researchResult.stopReason,
+    '| text chars:', researchResult.content.length,
+    '| citations:', researchResult.citations?.length ?? 0)
 
-  // Structured output: pull stores from the record_shopping_plan tool_use block.
-  const recordCall = aiResult.toolCalls?.find(tc => tc.name === 'record_shopping_plan')
+  if (researchResult.content.length < 100) {
+    console.error('[searchNonApiStores pass1] research too short to format — aborting')
+    return []
+  }
+
+  // ── Pass 2 — Format via forced tool call ───────────────────────────────────
+  const citationList = (researchResult.citations ?? [])
+    .slice(0, 150)
+    .map((c, i) => `${i + 1}. ${c.url}${c.title ? ` — ${c.title}` : ''}`)
+    .join('\n')
+
+  let formatResult
+  try {
+    formatResult = await provider.complete({
+      system: `You format grocery price research into a structured shopping plan.
+
+The ONLY action available to you is calling the record_shopping_plan tool. Call it exactly once with the full structured data derived from the research below.
+
+proofUrl MUST be one of the citation URLs provided. If no citation matches an item, set proofUrl to null.
+confidence MUST follow: "real" if the research explicitly states web_fetch confirmed the price, "estimated_with_source" if only web_search found a URL, "estimated" otherwise.`,
+      messages: [
+        {
+          role: 'user',
+          content: `## Research findings
+${researchResult.content}
+
+## Citation URLs (pool for proofUrl)
+${citationList || '(no citations captured)'}
+
+## Ingredient input list (use these exact ingredientId values)
+${itemLines}
+
+Emit the shopping plan now via record_shopping_plan.`
+        }
+      ],
+      maxTokens: 6000,
+      jsonMode: false,
+      tools: [recordShoppingPlanTool],
+      toolChoice: { type: 'tool', name: 'record_shopping_plan' }
+    })
+  } catch (err) {
+    console.error('[searchNonApiStores pass2] provider.complete threw:', err instanceof Error ? err.message : err)
+    return []
+  }
+
+  if (!formatResult) {
+    console.error('[searchNonApiStores pass2] provider returned no result')
+    return []
+  }
+
+  console.log('[searchNonApiStores pass2] stopReason:', formatResult.stopReason,
+    '| toolCalls:', formatResult.toolCalls?.length ?? 0)
+
+  const recordCall = formatResult.toolCalls?.find(tc => tc.name === 'record_shopping_plan')
   if (!recordCall) {
-    console.error('[searchNonApiStores] model did not call record_shopping_plan. Text preview:',
-      aiResult.content.slice(0, 300))
+    console.error('[searchNonApiStores pass2] model did not call record_shopping_plan despite forced tool_choice. Text preview:',
+      formatResult.content.slice(0, 300))
     return []
   }
+
   const input = recordCall.input as { stores?: StorePlan[] } | null
   const stores = input?.stores ?? []
-  console.log('[searchNonApiStores] record_shopping_plan returned', stores.length, 'stores')
+  console.log('[searchNonApiStores pass2] record_shopping_plan returned', stores.length, 'stores')
 
-  // Cross-reference asserted proofUrls against the citations the model actually
-  // retrieved. Anything not in citations is presumed fabricated.
-  const citedUrls = new Set((aiResult.citations ?? []).map(c => c.url))
+  // Cross-reference: any proofUrl the model put on items must appear in pass-1
+  // citations. URLs not in citations are treated as fabricated and dropped.
+  const citedUrls = new Set((researchResult.citations ?? []).map(c => c.url))
   for (const store of stores) {
     for (const item of store.items) {
       if (item.proofUrl && !citedUrls.has(item.proofUrl)) {
-        // Drop fabricated URL; downgrade confidence if it was asserted as real
         item.proofUrl = undefined
         if (item.confidence === 'real') item.confidence = 'estimated'
       }

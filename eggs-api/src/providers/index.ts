@@ -36,6 +36,11 @@ export interface ClientToolCall {
   input: unknown
 }
 
+export type ToolChoice =
+  | { type: 'auto' }
+  | { type: 'any' }
+  | { type: 'tool'; name: string }
+
 export interface CompletionParams {
   system: string
   messages: { role: 'user' | 'assistant'; content: string }[]
@@ -43,6 +48,8 @@ export interface CompletionParams {
   jsonMode?: boolean
   /** Server-side tools (e.g. web_search, web_fetch) and/or client tools for structured output. */
   tools?: AnthropicTool[]
+  /** Force-call a specific tool. Useful for structured output as the final action. */
+  toolChoice?: ToolChoice
 }
 
 export interface CompletionResult {

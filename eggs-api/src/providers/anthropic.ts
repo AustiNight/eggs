@@ -56,6 +56,7 @@ export class AnthropicProvider implements ModelProvider {
     const useToolMode = Array.isArray(params.tools) && params.tools.length > 0
     if (useToolMode) {
       body.tools = params.tools
+      if (params.toolChoice) body.tool_choice = params.toolChoice
     } else if (params.jsonMode) {
       body.messages = [
         ...params.messages,
