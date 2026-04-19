@@ -1,0 +1,22 @@
+{
+  "name": "eggs-email-catcher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Email Worker that receives test-account OTPs at eggs-test-*@aulson.pro and exposes them via an authenticated HTTP endpoint for automated browser testing.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "postal-mime": "^2.2.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "~5.8.2",
+    "vitest": "^4.1.2",
+    "wrangler": "^4.71.0"
+  }
+}

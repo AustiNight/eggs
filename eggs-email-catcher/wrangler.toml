@@ -1,0 +1,20 @@
+name = "eggs-email-catcher"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Stores captured emails with 10-minute TTL. Create with:
+#   wrangler kv namespace create EMAIL_INBOX
+# Then paste the id below.
+[[kv_namespaces]]
+binding = "EMAIL_INBOX"
+id = "3747e5bd77d4431e98b4c517c4e203ab"
+
+# Allowlist of email addresses the worker will accept. Anything else is rejected.
+# Keep wildcard-ish but specific to this app.
+[vars]
+ALLOWED_EMAIL_PATTERN = "^eggs-test-[A-Za-z0-9_.-]+@aulson\\.pro$"
+
+# Secrets:
+#   wrangler secret put SERVICE_KEY
+#     — shared with Claude/automation; required on the /latest + /history HTTP endpoints
