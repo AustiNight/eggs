@@ -28,5 +28,5 @@ export const requireAuthOrServiceKey = async (
     await next()
     return
   }
-  await requireAuth(c, next)
+  return requireAuth(c, next)
 }
