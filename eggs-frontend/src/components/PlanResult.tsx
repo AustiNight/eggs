@@ -257,7 +257,18 @@ const PlanResult: React.FC<PlanResultProps> = ({ plan, onReset }) => {
               <li className="flex items-start gap-2">
                 <ArrowRight className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
                 <span>
-                  {plan.summary.realPriceCount} live price{plan.summary.realPriceCount !== 1 ? 's' : ''} from Kroger API.
+                  {(() => {
+                    const apiSources = plan.meta.storesQueried
+                      .filter(s => s.source !== 'ai_estimated')
+                      .map(s => {
+                        if (s.source === 'kroger_api') return 'Kroger'
+                        if (s.source === 'walmart_api') return 'Walmart'
+                        return s.source.replace('_api', '')
+                      })
+                    const apiList = [...new Set(apiSources)].join(' + ')
+                    const source = apiList || 'direct APIs'
+                    return `${plan.summary.realPriceCount} live price${plan.summary.realPriceCount !== 1 ? 's' : ''} from ${source}.`
+                  })()}
                   {plan.summary.estimatedPriceCount > 0 && ` ${plan.summary.estimatedPriceCount} AI estimated.`}
                 </span>
               </li>

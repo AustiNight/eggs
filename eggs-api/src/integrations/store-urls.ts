@@ -27,6 +27,7 @@ const TEMPLATES: Record<string, (q: string) => string> = {
   'shaws':             q => `https://www.shaws.com/shop/search-results.html?q=${encodeURIComponent(q)}`,
   "shaw's":            q => `https://www.shaws.com/shop/search-results.html?q=${encodeURIComponent(q)}`,
   'fiesta mart':       q => `https://www.fiestamart.com/search?q=${encodeURIComponent(q)}`,
+  'central market':    q => `https://www.centralmarket.com/search?q=${encodeURIComponent(q)}`,
   'meijer':            q => `https://www.meijer.com/shop/en/search?text=${encodeURIComponent(q)}`,
   'wegmans':           q => `https://shop.wegmans.com/search?search_term=${encodeURIComponent(q)}`,
   'giant eagle':       q => `https://www.gianteagle.com/search?search=${encodeURIComponent(q)}`,
