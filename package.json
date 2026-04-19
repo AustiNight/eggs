@@ -9,9 +9,11 @@
     "test:e2e:smoke": "playwright test --grep @smoke",
     "test:api": "npm --prefix eggs-api run test",
     "test:frontend": "npm --prefix eggs-frontend run test",
-    "test": "npm run test:api && npm run test:frontend"
+    "test": "npm run test:api && npm run test:frontend",
+    "seed-test-users": "npm --prefix eggs-api run seed-test-users"
   },
   "devDependencies": {
+    "@clerk/testing": "^2.0.17",
     "@playwright/test": "^1.52.0"
   }
 }

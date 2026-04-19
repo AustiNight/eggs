@@ -8,7 +8,8 @@
     "cf-typegen": "wrangler types",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "seed-test-users": "tsx scripts/seed-test-users.ts"
   },
   "dependencies": {
     "@clerk/backend": "^1.13.0",
@@ -19,6 +20,8 @@
     "@cloudflare/workers-types": "^4.20241127.0",
     "@types/uuid": "^10.0.0",
     "@vitest/coverage-v8": "^4.1.2",
+    "dotenv": "^16.6.1",
+    "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vitest": "^4.1.2",
     "wrangler": "^4.71.0"

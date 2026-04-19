@@ -15,6 +15,7 @@ create table if not exists users (
   subscription_status text default 'active',
   subscription_period_end timestamptz,
   stripe_customer_id text,
+  is_test_account boolean not null default false,
   created_at timestamptz default now()
 );
 

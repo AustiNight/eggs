@@ -45,6 +45,8 @@ export interface DbUser {
   subscription_status: string
   subscription_period_end: string | null
   stripe_customer_id: string | null
+  /** True for seeded automation/test accounts — exempt from Stripe/email side-effects. */
+  is_test_account: boolean
   created_at: string
 }
 

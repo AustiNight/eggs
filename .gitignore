@@ -25,3 +25,15 @@ dist-ssr
 walmart_*
 setup-staging-secrets.sh
 setup-prod-secrets.sh
+
+# Local environment files (never commit)
+.env.seed.local
+.env.test.local
+.env.*.local
+
+# Playwright auth state
+playwright/.clerk/
+playwright/.auth/
+
+# Playwright MCP scratch output (screenshots, snapshots, console logs)
+.playwright-mcp/
