@@ -34,11 +34,11 @@ name = "eggs-api-staging"
 
 [[env.staging.kv_namespaces]]
 binding = "RATE_LIMIT_KV"
-id = "REPLACE_WITH_STAGING_RATE_LIMIT_KV_ID"
+id = "2f8f44b1a73c4d89bfd9a99ef7300796"
 
 [[env.staging.kv_namespaces]]
 binding = "URL_CACHE"
-id = "REPLACE_WITH_STAGING_URL_CACHE_KV_ID"
+id = "1dfca63fafe649e0b9c68cdbf67a55fe"
 
 [env.staging.vars]
 FREE_MONTHLY_LIMIT = "100"
