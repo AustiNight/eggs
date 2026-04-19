@@ -1,6 +1,6 @@
 # E.G.G.S. Integrations Reference
 
-*Last updated: 2026-04-18*
+*Last updated: 2026-04-19*
 
 A map of every US grocery / product-URL data source we've evaluated, the approach we chose, and why. Update this file whenever a new retailer API is integrated, dropped, or changes availability.
 
@@ -17,6 +17,7 @@ A map of every US grocery / product-URL data source we've evaluated, the approac
 | **Deterministic search-landing URL** | Static template per banner | ❌ | — | Always valid landing page | — | $0 | `eggs-api/src/integrations/store-urls.ts`. Google-scoped fallback for unknown banners. |
 | **Per-(banner, ingredient) KV cache** | `URL_CACHE` namespace | Cached price + URL result | — | — | — | $0 | 24h TTL. Second user searching the same item/banner within the window is free. |
 | **Open Food Facts** | Public HTTP + Prices extension | Weak US coverage for prices | ❌ | — | — | Free (OdBL) | Integrated for product metadata (nutrition, allergens), NOT for pricing. `eggs-api/src/integrations/openfoodfacts.ts` |
+| **eggs-email-catcher** (automation support) | Cloudflare Email Worker + KV | n/a (OTP capture) | — | — | — | Free | Receives `eggs-test-*@aulson.pro` via Cloudflare Email Routing, extracts OTPs via `postal-mime`, exposes authenticated `/latest` + `/history`. Used by browser-testing automation for Clerk device verification, future password-reset, Stripe receipt verification. `eggs-email-catcher/src/index.ts` |
 
 ---
 
