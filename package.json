@@ -10,7 +10,8 @@
     "test:api": "npm --prefix eggs-api run test",
     "test:frontend": "npm --prefix eggs-frontend run test",
     "test": "npm run test:api && npm run test:frontend",
-    "seed-test-users": "npm --prefix eggs-api run seed-test-users"
+    "seed-test-users": "npm --prefix eggs-api run seed-test-users",
+    "mint-sign-in-token": "npm --prefix eggs-api run -s mint-sign-in-token --"
   },
   "devDependencies": {
     "@clerk/testing": "^2.0.17",

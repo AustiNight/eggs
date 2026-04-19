@@ -44,46 +44,40 @@ npx wrangler tail --format pretty
 ```
 Run with `run_in_background: true` so you can keep driving the browser. Note the background task id — you'll read it at the end.
 
-### Step 2 — Read credentials (without echoing passwords)
+### Step 2 — Mint a Clerk sign-in ticket (zero-password, zero-OTP)
+
+Default to the **pro** user. Switch to `free` only when testing the paywall.
 
 ```bash
-awk -F'=' '/^TEST_USER_EMAIL/ {print "EMAIL="$2}' /Users/jonathanaulson/Projects/eggs/.env.test.local
-awk -F'=' '/^TEST_USER_PASSWORD/ {print $2}' /Users/jonathanaulson/Projects/eggs/.env.test.local
+cd /Users/jonathanaulson/Projects/eggs
+TICKET_URL=$(npm run -s mint-sign-in-token pro 2>&1 | tail -1)
+echo "$TICKET_URL" > /tmp/ticket-url.txt
 ```
 
-Default to the **pro** user (`TEST_USER_*`). Switch to `FREE_TEST_USER_*` only when explicitly testing the paywall.
-
-### Step 3 — Sign in via Clerk
-
-Navigate:
+Under the hood this calls `clerkClient.signInTokens.createSignInToken({ userId })` with the test user's Clerk ID from `.env.test.local`. The resulting URL has shape:
 ```
-browser_navigate(url: "https://priceofeggs.online")
+https://priceofeggs.online/sign-in?__clerk_ticket=<single-use JWT>
 ```
-Snapshot. You may land at `/dashboard` (existing session) or `/sign-in` (fresh).
+The token is one-shot, expires in 5 min, and bypasses password + MFA + device verification by design.
 
-**If at `/sign-in`:**
-1. `browser_type(ref: <Email address textbox>, text: <email>)`
-2. `browser_click(ref: <Continue>)`
-3. After snapshot: `browser_type(ref: <Password textbox>, text: <password>)`
-4. `browser_click(ref: <Continue>)`
+### Step 3 — Navigate Playwright to the ticket URL
 
-**If redirected to `/sign-in/factor-two`** (Clerk device verification — happens on each new MCP browser profile):
+```
+browser_navigate(url: <TICKET_URL>)
+```
 
-- **Option A — eggs-email-catcher (preferred):** the Worker at `https://eggs-email-catcher.jonathan-aulson.workers.dev` captures any inbound mail at `eggs-test-*@aulson.pro` for 10 min. Service key lives in `.env.test.local` as `EGGS_EMAIL_SERVICE_KEY`.
-  ```bash
-  sleep 8   # wait for Clerk to send + routing to land
-  SVCKEY=$(awk -F'=' '/^EGGS_EMAIL_SERVICE_KEY/ {print $2}' /Users/jonathanaulson/Projects/eggs/.env.test.local)
-  curl -s -H "X-Service-Key: $SVCKEY" \
-    "https://eggs-email-catcher.jonathan-aulson.workers.dev/latest?email=eggs-test-pro@aulson.pro" \
-    | python3 -c 'import json,sys;print(json.load(sys.stdin).get("otp",""))'
-  ```
-  If the response is 404, wait a few more seconds and retry — Clerk and Cloudflare's routing add a few seconds of latency.
+Then `browser_wait_for(text: "Pro Test User", time: 10)` — Clerk's SDK consumes the `__clerk_ticket` query param, establishes a session, and redirects to `/dashboard`. Takes 1–3 seconds after the navigate; wait_for bridges the gap.
 
-- **Option B — paste-in-chat (fallback):** if the catcher misses the message, ask the user for the 6-digit OTP from `eggs-test-pro@aulson.pro`.
+Expected landing: `/dashboard` with the greeting "Hey, Pro Test User 👋" and a PRO badge in the header.
 
-- **Option C — `@clerk/testing`'s `clerk.signIn()`** bypasses device verification entirely by minting the session via Clerk's Frontend API. Not yet wired up; future upgrade.
+**If the ticket doesn't consume** (rare; usually expired >5min or stale session):
+1. Clear the stale session first: `browser_evaluate(function: "async () => { if (window.Clerk) { await window.Clerk.signOut() } })"`
+2. Mint a fresh token (re-run Step 2).
+3. Navigate again.
 
-Fill the code into the verification textbox and click Continue. Land at `/dashboard`.
+**Password-based sign-in is still available** as a fallback — credentials are in `.env.test.local` as `TEST_USER_EMAIL`/`TEST_USER_PASSWORD`. Only useful if you're specifically testing the password UI itself. Device verification will fire on a fresh browser and will require email OTP (see note below).
+
+**About OTP receipt:** Currently no automated OTP retrieval. If you ever need to exercise the password-reset / email-code / device-verify flow, either ask the user to paste the code, or activate `eggs-email-catcher` (already deployed, dormant — needs a real domain with MX → Cloudflare to receive mail).
 
 ### Step 4 — Create a shopping list
 

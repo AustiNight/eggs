@@ -165,6 +165,7 @@ async function main() {
   for (const s of seeded) {
     lines.push(`${s.envPrefix}_EMAIL=${s.email}`)
     lines.push(`${s.envPrefix}_PASSWORD=${s.password}`)
+    lines.push(`${s.envPrefix}_CLERK_ID=${s.userId}`)
     lines.push('')
   }
   writeFileSync(TEST_ENV_PATH, lines.join('\n'))
@@ -174,6 +175,7 @@ async function main() {
   for (const s of seeded) {
     console.log(`  ${s.envPrefix}_EMAIL`)
     console.log(`  ${s.envPrefix}_PASSWORD`)
+    console.log(`  ${s.envPrefix}_CLERK_ID`)
   }
 
   console.log('\nDone. You can now:')
