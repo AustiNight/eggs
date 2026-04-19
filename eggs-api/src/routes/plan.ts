@@ -211,15 +211,23 @@ Tax rate: 8.25%.`
       jsonMode: false,  // tools are incompatible with Anthropic's jsonMode prefill
       tools
     })
-  } catch {
+  } catch (err) {
+    console.error('[searchNonApiStores] provider.complete threw:', err instanceof Error ? err.message : err)
     return []
   }
 
-  if (!aiResult) return []
+  if (!aiResult) {
+    console.error('[searchNonApiStores] provider returned no result')
+    return []
+  }
   const raw = aiResult.content
+  console.log('[searchNonApiStores] AI returned', raw.length, 'chars;', aiResult.citations?.length ?? 0, 'citations')
   // Tool-mode responses are free-text; extract the first top-level JSON object.
   const jsonMatch = raw.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) return []
+  if (!jsonMatch) {
+    console.error('[searchNonApiStores] no JSON object found in AI response. First 500 chars:', raw.slice(0, 500))
+    return []
+  }
   let parsed: { stores?: StorePlan[] }
   try {
     parsed = JSON.parse(jsonMatch[0]) as { stores?: StorePlan[] }
@@ -344,9 +352,23 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     searchNonApiStores(ingredients, body, user, provider, apiCoveredStores)
   ])
 
+  if (krogerSearchOutcome.status === 'rejected') {
+    console.error('[plan] Kroger search rejected:', krogerSearchOutcome.reason)
+  }
+  if (walmartSearchOutcome.status === 'rejected') {
+    console.error('[plan] Walmart search rejected:', walmartSearchOutcome.reason)
+  }
+  if (aiSearchOutcome.status === 'rejected') {
+    console.error('[plan] AI search rejected:', aiSearchOutcome.reason)
+  }
+
   const krogerResult = krogerSearchOutcome.status === 'fulfilled' ? krogerSearchOutcome.value : null
   const walmartResult = walmartSearchOutcome.status === 'fulfilled' ? walmartSearchOutcome.value : null
   const aiStorePlans = aiSearchOutcome.status === 'fulfilled' ? aiSearchOutcome.value : []
+
+  console.log('[plan] results → kroger items:', krogerResult ? Object.keys(krogerResult.items).length : 'null',
+    'walmart items:', walmartResult ? Object.keys(walmartResult).length : 'null',
+    'ai stores:', aiStorePlans.length)
 
   // ── Step 3: Assemble store plans ─────────────────────────────────────────
   const allStores: StorePlan[] = []

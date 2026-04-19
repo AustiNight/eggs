@@ -85,10 +85,15 @@ export class WalmartClient {
     let res: Response
     try {
       res = await fetch(url.toString(), { headers })
-    } catch {
+    } catch (err) {
+      console.error('[walmart] searchProducts fetch threw:', err instanceof Error ? err.message : err)
       return []
     }
-    if (!res.ok) return []
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '<unreadable>')
+      console.error('[walmart] searchProducts status', res.status, 'body:', errBody.slice(0, 500))
+      return []
+    }
 
     const data = await res.json().catch(() => null) as
       | { items?: WalmartProduct[] }
