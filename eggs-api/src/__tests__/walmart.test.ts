@@ -70,17 +70,15 @@ describe('WalmartClient.signHeaders', () => {
     expect(headers['WM_SEC.AUTH_SIGNATURE']).toMatch(/^[A-Za-z0-9+/]+=*$/)
   })
 
-  it('signs canonical string with alphabetically sorted headers', async () => {
+  it('signs canonical string with values only (no header names), alphabetical order', async () => {
     const client = new WalmartClient('abc-123', '2', '-----BEGIN PRIVATE KEY-----\naGVsbG8=\n-----END PRIVATE KEY-----', 'pub')
     await client.signHeaders(1700000000000)
     expect(signSpy).toHaveBeenCalledOnce()
     const signedData = signSpy.mock.calls[0][2] as Uint8Array
     const canonical = new TextDecoder().decode(signedData)
-    // Must be WM_CONSUMER.ID → WM_CONSUMER.INTIMESTAMP → WM_SEC.KEY_VERSION in that sorted order
-    const lines = canonical.split('\n')
-    expect(lines[0]).toBe('WM_CONSUMER.ID:abc-123')
-    expect(lines[1]).toBe('WM_CONSUMER.INTIMESTAMP:1700000000000')
-    expect(lines[2]).toBe('WM_SEC.KEY_VERSION:2')
+    // Per Walmart Java sample: only values are emitted, in alphabetical header-name order,
+    // each terminated by '\n'. Order: WM_CONSUMER.ID < WM_CONSUMER.INTIMESTAMP < WM_SEC.KEY_VERSION.
+    expect(canonical).toBe('abc-123\n1700000000000\n2\n')
   })
 
   it('caches the imported CryptoKey across calls', async () => {

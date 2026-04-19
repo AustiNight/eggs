@@ -133,9 +133,11 @@ async function searchNonApiStores(
   const isPro = user?.subscription_tier === 'pro'
   const maxSearches = isPro ? 100 : 25
 
+  // allowed_callers: ['direct'] is required for claude-haiku-4-5 — Haiku does not
+  // support programmatic tool calling (code_execution calling other tools).
   const tools: AnthropicTool[] = [
-    { type: 'web_search_20260209', name: 'web_search', max_uses: maxSearches },
-    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: Math.floor(maxSearches / 2) }
+    { type: 'web_search_20260209', name: 'web_search', max_uses: maxSearches, allowed_callers: ['direct'] },
+    { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: Math.floor(maxSearches / 2), allowed_callers: ['direct'] }
   ]
 
   let aiResult

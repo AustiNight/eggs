@@ -13,6 +13,8 @@ export interface AnthropicTool {
   max_uses?: number
   allowed_domains?: string[]
   blocked_domains?: string[]
+  /** Haiku requires ['direct'] — it doesn't support programmatic tool calling. */
+  allowed_callers?: string[]
   [key: string]: unknown
 }
 

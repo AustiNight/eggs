@@ -188,9 +188,16 @@ export class WalmartClient {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Walmart's canonical string = the VALUES of the three non-signature headers,
+ * emitted in alphabetical header-name order, each followed by '\n'.
+ * Per walmart.io/apidocs/affiliates/additional-headers (Java sample):
+ *   canonicalizedStrBuffer.append(val.toString().trim()).append("\n");
+ * No header names are emitted.
+ */
 function canonicalString(headers: Record<string, string>): string {
   const sortedNames = Object.keys(headers).sort()
-  return sortedNames.map(n => `${n}:${headers[n]}\n`).join('')
+  return sortedNames.map(n => `${headers[n]}\n`).join('')
 }
 
 export function pemToArrayBuffer(pem: string): ArrayBuffer {
