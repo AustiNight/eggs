@@ -3,30 +3,49 @@ main = "src/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
+# ── Production (default — `wrangler deploy` targets this) ──
+
 [[kv_namespaces]]
 binding = "RATE_LIMIT_KV"
 id = "914637fc5b194fbe89d5879179d6881b"
 
 # Per-(banner, ingredient) resolved StoreItem cache, 24h TTL.
 # Create via: wrangler kv namespace create URL_CACHE
-# Then paste the returned id below (replace REPLACE_WITH_KV_ID).
 [[kv_namespaces]]
 binding = "URL_CACHE"
-id = "REPLACE_WITH_KV_ID"
+id = "REPLACE_WITH_PROD_URL_CACHE_KV_ID"
 
 [vars]
 FREE_MONTHLY_LIMIT = "3"
 
-# Secrets — set via: wrangler secret put <SECRET_NAME>
-# ANTHROPIC_API_KEY
-# CLERK_SECRET_KEY
-# SUPABASE_URL
-# SUPABASE_SERVICE_KEY
-# KROGER_CLIENT_ID
-# KROGER_CLIENT_SECRET
-# WALMART_CONSUMER_ID         # UUID from walmart.io registration
-# WALMART_KEY_VERSION         # e.g. "1"
-# WALMART_PRIVATE_KEY         # unencrypted PKCS#8 PEM (decrypt walmart_rsa_key first)
-# WALMART_PUBLISHER_ID        # Impact Radius Publisher ID
-# TAPESTRY_SERVICE_KEY
-# STRIPE_WEBHOOK_SECRET
+# Prod secrets — set via: wrangler secret put <NAME>
+# ANTHROPIC_API_KEY, CLERK_SECRET_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY,
+# KROGER_CLIENT_ID, KROGER_CLIENT_SECRET,
+# WALMART_CONSUMER_ID, WALMART_KEY_VERSION, WALMART_PRIVATE_KEY, WALMART_PUBLISHER_ID,
+# (optional) WALMART_BASE_URL — only set if Walmart hands you a non-default URL,
+# TAPESTRY_SERVICE_KEY, STRIPE_WEBHOOK_SECRET
+
+# ── Staging (deploy with: `wrangler deploy --env staging`) ──
+# IMPORTANT: Cloudflare does NOT inherit top-level kv_namespaces / vars into env blocks.
+# Every binding the staging worker needs must be re-declared below.
+
+[env.staging]
+name = "eggs-api-staging"
+
+[[env.staging.kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "REPLACE_WITH_STAGING_RATE_LIMIT_KV_ID"
+
+[[env.staging.kv_namespaces]]
+binding = "URL_CACHE"
+id = "REPLACE_WITH_STAGING_URL_CACHE_KV_ID"
+
+[env.staging.vars]
+FREE_MONTHLY_LIMIT = "100"
+
+# Staging secrets — set with --env staging:
+#   wrangler secret put WALMART_CONSUMER_ID --env staging   (etc.)
+# Staging Walmart credentials are different from prod (different consumer ID,
+# different key version, different RSA keypair — use walmart_rsa_key_staging).
+# If Walmart's staging dashboard gives you a different base URL (e.g. .stg.),
+# set: wrangler secret put WALMART_BASE_URL --env staging

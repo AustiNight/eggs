@@ -14,17 +14,22 @@
 
 import type { WalmartLocation, WalmartProduct } from '../types/index.js'
 
-const WALMART_BASE = 'https://developer.api.walmart.com/api-proxy/service/affil/product/v2'
+const DEFAULT_WALMART_BASE = 'https://developer.api.walmart.com/api-proxy/service/affil/product/v2'
 
 export class WalmartClient {
   private cachedKey: CryptoKey | null = null
+  private baseUrl: string
 
   constructor(
     private consumerId: string,
     private keyVersion: string,
     private privateKeyPem: string,
-    private publisherId: string
-  ) {}
+    private publisherId: string,
+    /** Override base URL (for staging or future endpoint moves). Defaults to prod. */
+    baseUrl?: string
+  ) {
+    this.baseUrl = (baseUrl?.trim() || DEFAULT_WALMART_BASE).replace(/\/$/, '')
+  }
 
   // ── Key import ─────────────────────────────────────────────────────────────
 
@@ -70,7 +75,7 @@ export class WalmartClient {
    * Walmart affiliate pricing is primarily national; zipCode is best-effort.
    */
   async searchProducts(query: string, zipCode?: string): Promise<WalmartProduct[]> {
-    const url = new URL(`${WALMART_BASE}/search`)
+    const url = new URL(`${this.baseUrl}/search`)
     url.searchParams.set('query', query)
     url.searchParams.set('publisherId', this.publisherId)
     url.searchParams.set('numItems', '5')
@@ -97,7 +102,7 @@ export class WalmartClient {
    */
   async getItems(itemIds: string[]): Promise<WalmartProduct[]> {
     if (itemIds.length === 0) return []
-    const url = new URL(`${WALMART_BASE}/items`)
+    const url = new URL(`${this.baseUrl}/items`)
     url.searchParams.set('ids', itemIds.slice(0, 20).join(','))
     url.searchParams.set('publisherId', this.publisherId)
 
@@ -121,7 +126,7 @@ export class WalmartClient {
    * gracefully returns an empty list if the endpoint is missing in production.
    */
   async findNearbyLocations(lat: number, lng: number): Promise<WalmartLocation[]> {
-    const url = new URL(`${WALMART_BASE}/stores`)
+    const url = new URL(`${this.baseUrl}/stores`)
     url.searchParams.set('lat', String(lat))
     url.searchParams.set('lon', String(lng))
     url.searchParams.set('publisherId', this.publisherId)

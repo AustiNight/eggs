@@ -22,6 +22,8 @@ export interface Env {
   WALMART_KEY_VERSION: string
   WALMART_PRIVATE_KEY: string
   WALMART_PUBLISHER_ID: string
+  /** Optional override for the Walmart Affiliate API base URL. Defaults to prod. */
+  WALMART_BASE_URL?: string
   TAPESTRY_SERVICE_KEY: string
   STRIPE_WEBHOOK_SECRET: string
 }

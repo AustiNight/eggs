@@ -319,7 +319,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
       c.env.WALMART_CONSUMER_ID,
       c.env.WALMART_KEY_VERSION,
       c.env.WALMART_PRIVATE_KEY,
-      c.env.WALMART_PUBLISHER_ID
+      c.env.WALMART_PUBLISHER_ID,
+      c.env.WALMART_BASE_URL
     )
   }
 
