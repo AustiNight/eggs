@@ -13,7 +13,7 @@ id = "914637fc5b194fbe89d5879179d6881b"
 # Create via: wrangler kv namespace create URL_CACHE
 [[kv_namespaces]]
 binding = "URL_CACHE"
-id = "REPLACE_WITH_PROD_URL_CACHE_KV_ID"
+id = "61e42f6b29bb45c6b64989befe3fcf89"
 
 [vars]
 FREE_MONTHLY_LIMIT = "3"
