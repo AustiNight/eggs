@@ -69,13 +69,19 @@ Snapshot. You may land at `/dashboard` (existing session) or `/sign-in` (fresh).
 
 **If redirected to `/sign-in/factor-two`** (Clerk device verification — happens on each new MCP browser profile):
 
-- **Option A — paste-in-chat:** ask the user for the 6-digit OTP from `eggs-test-pro@aulson.pro`. They have Cloudflare Email Routing on `aulson.pro` forwarding to their real inbox.
-- **Option B — once the email-catcher Worker exists** (see `INTEGRATIONS.md` backlog):
+- **Option A — eggs-email-catcher (preferred):** the Worker at `https://eggs-email-catcher.jonathan-aulson.workers.dev` captures any inbound mail at `eggs-test-*@aulson.pro` for 10 min. Service key lives in `.env.test.local` as `EGGS_EMAIL_SERVICE_KEY`.
   ```bash
-  curl -H "X-Service-Key: $EGGS_EMAIL_SERVICE_KEY" \
-    "https://eggs-email-catcher.<subdomain>.workers.dev/latest?email=eggs-test-pro@aulson.pro"
+  sleep 8   # wait for Clerk to send + routing to land
+  SVCKEY=$(awk -F'=' '/^EGGS_EMAIL_SERVICE_KEY/ {print $2}' /Users/jonathanaulson/Projects/eggs/.env.test.local)
+  curl -s -H "X-Service-Key: $SVCKEY" \
+    "https://eggs-email-catcher.jonathan-aulson.workers.dev/latest?email=eggs-test-pro@aulson.pro" \
+    | python3 -c 'import json,sys;print(json.load(sys.stdin).get("otp",""))'
   ```
-- **Option C — `@clerk/testing`'s `clerk.signIn()`** bypasses this entirely. When implemented, load storageState instead of driving the UI.
+  If the response is 404, wait a few more seconds and retry — Clerk and Cloudflare's routing add a few seconds of latency.
+
+- **Option B — paste-in-chat (fallback):** if the catcher misses the message, ask the user for the 6-digit OTP from `eggs-test-pro@aulson.pro`.
+
+- **Option C — `@clerk/testing`'s `clerk.signIn()`** bypasses device verification entirely by minting the session via Clerk's Frontend API. Not yet wired up; future upgrade.
 
 Fill the code into the verification textbox and click Continue. Land at `/dashboard`.
 
