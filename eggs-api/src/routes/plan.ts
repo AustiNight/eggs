@@ -45,10 +45,14 @@ async function cacheKey(bannerNormalized: string, ingredientName: string): Promi
   return `item:v1:${bannerNormalized.replace(/\s+/g, '-')}:${hash.slice(0, 24)}`
 }
 
-// ── Kroger: search all ingredients at a single location ──────────────────────
+// ── Kroger: search all ingredients across nearby locations ──────────────────
+// Primary location anchors the store card; per-ingredient fallback cascades
+// through secondary locations when primary has no priced match (common with
+// Kroger's sparser "Fresh Fare" inventory). Each ingredient disambiguates
+// independently.
 async function searchKroger(
   ingredients: IngredientLine[],
-  location: KrogerLocation,
+  locations: KrogerLocation[],
   client: KrogerClient
 ): Promise<{
   storeName: string
@@ -57,27 +61,33 @@ async function searchKroger(
     sku: string; name: string; brand: string
     regularPrice: number; promoPrice: number | null
     productUrl: string; size: string
+    matchedLocationId: string
   }>
-}> {
+} | null> {
+  if (locations.length === 0) return null
+  const primary = locations[0]
+  const locationIds = locations.map(l => l.locationId)
+
   const items: Record<string, {
     sku: string; name: string; brand: string
     regularPrice: number; promoPrice: number | null
     productUrl: string; size: string
+    matchedLocationId: string
   }> = {}
 
   await Promise.allSettled(
     ingredients.map(async (ingredient) => {
-      const result = await client.getPriceForIngredient(ingredient.name, location.locationId)
+      const result = await client.getPriceForIngredient(ingredient.name, locationIds)
       if (result) items[ingredient.id] = result
     })
   )
 
   return {
-    storeName: location.name,
+    storeName: primary.name,
     storeAddress: [
-      location.address.addressLine1,
-      location.address.city,
-      location.address.state
+      primary.address.addressLine1,
+      primary.address.city,
+      primary.address.state
     ].join(', '),
     items
   }
@@ -388,14 +398,14 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
 
   // ── Step 1: Direct API store discovery ───────────────────────────────────
   let krogerClient: KrogerClient | null = null
-  let krogerPrimaryLocation: KrogerLocation | null = null
+  let krogerLocations: KrogerLocation[] = []
   if (c.env.KROGER_CLIENT_ID && c.env.KROGER_CLIENT_SECRET) {
     krogerClient = new KrogerClient(c.env.KROGER_CLIENT_ID, c.env.KROGER_CLIENT_SECRET)
-    const locations = await krogerClient
+    krogerLocations = await krogerClient
       .findNearbyLocations(body.location.lat, body.location.lng, body.settings.radiusMiles)
       .catch(() => [])
-    krogerPrimaryLocation = locations[0] ?? null
   }
+  const krogerPrimaryLocation = krogerLocations[0] ?? null
 
   let walmartClient: WalmartClient | null = null
   if (
@@ -424,8 +434,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
 
   // ── Step 2: Parallel price search ───────────────────────────────────────
   const [krogerSearchOutcome, walmartSearchOutcome, aiSearchOutcome] = await Promise.allSettled([
-    krogerClient && krogerPrimaryLocation
-      ? searchKroger(ingredients, krogerPrimaryLocation, krogerClient)
+    krogerClient && krogerLocations.length > 0
+      ? searchKroger(ingredients, krogerLocations, krogerClient)
       : Promise.resolve(null),
     walmartClient
       ? searchWalmart(ingredients, walmartClient, walmartZip)

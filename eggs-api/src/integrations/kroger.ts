@@ -79,10 +79,23 @@ export class KrogerClient {
     return data.data ?? []
   }
 
-  /** Get store-specific price for a single product query. Returns best match or null. */
+  /**
+   * Get the best-available priced match for a single ingredient.
+   *
+   * Fallback cascade, applied PER INGREDIENT independently:
+   *   1. Primary query at locationIds[0]
+   *   2. If zero results OR all results unpriced → unit-noise-stripped query at
+   *      locationIds[0] (e.g. "head garlic" → "garlic"; avoids "Boar's Head
+   *      garlic hummus" being the top hit that poisons disambiguation)
+   *   3. If still no priced result → cascade through locationIds[1..N] with the
+   *      best query variant so far
+   *
+   * Returns the first priced match encountered, along with the locationId where
+   * it was actually found (for downstream UI and URL attribution).
+   */
   async getPriceForIngredient(
     ingredientName: string,
-    locationId: string
+    locationIds: string | string[]
   ): Promise<{
     sku: string
     name: string
@@ -91,45 +104,53 @@ export class KrogerClient {
     promoPrice: number | null
     productUrl: string
     size: string
+    matchedLocationId: string
   } | null> {
-    // Kroger's /products endpoint matches literally against description + brand.
-    // "lbs ground beef" matches fewer things than "ground beef". Try raw first,
-    // then retry with unit-noise stripped if raw returns nothing.
-    let products = await this.searchProducts(ingredientName, locationId)
-    if (!products.length) {
-      const stripped = stripUnitNoise(ingredientName)
-      if (stripped && stripped !== ingredientName) {
-        products = await this.searchProducts(stripped, locationId)
-        if (products.length) {
-          console.log(`[kroger] "${ingredientName}" → 0 matches; "${stripped}" → ${products.length} matches`)
+    const locations = Array.isArray(locationIds) ? locationIds : [locationIds]
+    if (!locations.length) return null
+
+    const stripped = stripUnitNoise(ingredientName)
+    const queries = stripped && stripped !== ingredientName
+      ? [ingredientName, stripped]
+      : [ingredientName]
+
+    for (const locationId of locations) {
+      for (const query of queries) {
+        const products = await this.searchProducts(query, locationId)
+        if (!products.length) continue
+
+        const priced = firstPriced(products)
+        if (priced) {
+          if (query !== ingredientName) {
+            console.log(`[kroger] "${ingredientName}" → "${query}" matched ${priced.description} at ${locationId}`)
+          } else if (locationId !== locations[0]) {
+            console.log(`[kroger] "${ingredientName}" fell back to location ${locationId} (primary had no priced match)`)
+          }
+          return {
+            sku: priced.items![0]!.itemId,
+            name: priced.description,
+            brand: priced.brand,
+            regularPrice: priced.items![0]!.price!.regular,
+            promoPrice: priced.items![0]!.price!.promo ?? null,
+            productUrl: `https://www.kroger.com/p/${priced.description.toLowerCase().replace(/\s+/g, '-')}/${priced.productId}`,
+            size: priced.items![0]!.size,
+            matchedLocationId: locationId
+          }
         }
       }
-      if (!products.length) {
-        console.log(`[kroger] no matches for "${ingredientName}"`)
-        return null
-      }
     }
 
-    // Scan all results for the first one with a priced item at this location.
-    // Previously we only checked products[0]; if the top hit lacked price data
-    // we'd return null despite results 2-10 potentially being viable.
-    for (const product of products) {
-      const item = product.items?.[0]
-      if (!item?.price?.regular) continue
-      return {
-        sku: item.itemId,
-        name: product.description,
-        brand: product.brand,
-        regularPrice: item.price.regular,
-        promoPrice: item.price.promo ?? null,
-        productUrl: `https://www.kroger.com/p/${product.description.toLowerCase().replace(/\s+/g, '-')}/${product.productId}`,
-        size: item.size
-      }
-    }
-
-    console.log(`[kroger] "${ingredientName}" — ${products.length} results but none had a price at locationId=${locationId}`)
+    console.log(`[kroger] no priced match for "${ingredientName}" across ${locations.length} location(s)`)
     return null
   }
+}
+
+function firstPriced(products: KrogerProduct[]): KrogerProduct | null {
+  for (const p of products) {
+    const item = p.items?.[0]
+    if (item?.price?.regular) return p
+  }
+  return null
 }
 
 /**
