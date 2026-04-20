@@ -45,12 +45,16 @@ export class KrogerClient {
     const params = new URLSearchParams({
       'filter.term': query,
       'filter.locationId': locationId,
-      'filter.limit': '5'
+      'filter.limit': '10'
     })
     const res = await fetch(`${KROGER_BASE}/products?${params}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    if (!res.ok) return []
+    if (!res.ok) {
+      const body = await res.text().catch(() => '<unreadable>')
+      console.error('[kroger] searchProducts status', res.status, 'query:', query, 'body:', body.slice(0, 300))
+      return []
+    }
     const data = await res.json() as { data?: KrogerProduct[] }
     return data.data ?? []
   }
@@ -88,21 +92,68 @@ export class KrogerClient {
     productUrl: string
     size: string
   } | null> {
-    const products = await this.searchProducts(ingredientName, locationId)
-    if (!products.length) return null
-
-    const product = products[0]
-    const item = product.items?.[0]
-    if (!item?.price?.regular) return null
-
-    return {
-      sku: item.itemId,
-      name: product.description,
-      brand: product.brand,
-      regularPrice: item.price.regular,
-      promoPrice: item.price.promo ?? null,
-      productUrl: `https://www.kroger.com/p/${product.description.toLowerCase().replace(/\s+/g, '-')}/${product.productId}`,
-      size: item.size
+    // Kroger's /products endpoint matches literally against description + brand.
+    // "lbs ground beef" matches fewer things than "ground beef". Try raw first,
+    // then retry with unit-noise stripped if raw returns nothing.
+    let products = await this.searchProducts(ingredientName, locationId)
+    if (!products.length) {
+      const stripped = stripUnitNoise(ingredientName)
+      if (stripped && stripped !== ingredientName) {
+        products = await this.searchProducts(stripped, locationId)
+        if (products.length) {
+          console.log(`[kroger] "${ingredientName}" → 0 matches; "${stripped}" → ${products.length} matches`)
+        }
+      }
+      if (!products.length) {
+        console.log(`[kroger] no matches for "${ingredientName}"`)
+        return null
+      }
     }
+
+    // Scan all results for the first one with a priced item at this location.
+    // Previously we only checked products[0]; if the top hit lacked price data
+    // we'd return null despite results 2-10 potentially being viable.
+    for (const product of products) {
+      const item = product.items?.[0]
+      if (!item?.price?.regular) continue
+      return {
+        sku: item.itemId,
+        name: product.description,
+        brand: product.brand,
+        regularPrice: item.price.regular,
+        promoPrice: item.price.promo ?? null,
+        productUrl: `https://www.kroger.com/p/${product.description.toLowerCase().replace(/\s+/g, '-')}/${product.productId}`,
+        size: item.size
+      }
+    }
+
+    console.log(`[kroger] "${ingredientName}" — ${products.length} results but none had a price at locationId=${locationId}`)
+    return null
   }
+}
+
+/**
+ * Strip common unit / packaging / quantity words from an ingredient query.
+ * "1 head garlic" → "garlic"; "2 cans tomato paste" → "tomato paste".
+ * Leaves the core product name. Used as a fallback when literal query fails.
+ */
+function stripUnitNoise(raw: string): string {
+  const noise = new Set([
+    'lb', 'lbs', 'pound', 'pounds',
+    'oz', 'ozs', 'ounce', 'ounces',
+    'can', 'cans', 'bottle', 'bottles',
+    'jar', 'jars', 'head', 'heads', 'bunch', 'bunches',
+    'loaf', 'loaves', 'bag', 'bags', 'box', 'boxes',
+    'pack', 'packs', 'package', 'packages',
+    'gallon', 'gallons', 'qt', 'quart', 'quarts',
+    'pt', 'pint', 'pints', 'cup', 'cups',
+    'tbsp', 'tablespoon', 'tsp', 'teaspoon',
+    'dozen', 'dozens', 'fresh', 'organic'
+  ])
+  return raw
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(w => w.length > 0 && !/^\d/.test(w) && !noise.has(w))
+    .join(' ')
+    .trim()
 }
