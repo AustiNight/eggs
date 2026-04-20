@@ -82,15 +82,16 @@ export class KrogerClient {
   /**
    * Get the best-available priced match for a single ingredient.
    *
-   * Fallback cascade, applied PER INGREDIENT independently:
-   *   1. Primary query at locationIds[0]
-   *   2. If zero results OR all results unpriced → unit-noise-stripped query at
-   *      locationIds[0] (e.g. "head garlic" → "garlic"; avoids "Boar's Head
-   *      garlic hummus" being the top hit that poisons disambiguation)
-   *   3. If still no priced result → cascade through locationIds[1..N] with the
-   *      best query variant so far
+   * Search cascade, applied PER INGREDIENT independently:
+   *   1. If the ingredient has strippable unit/packaging noise, run the STRIPPED
+   *      query first — "head garlic" → "garlic" avoids Boar's Head hummus
+   *      poisoning the top hits via tokenization.
+   *   2. If stripped returns no priced match (or stripping is a no-op), run
+   *      the raw query as a fallback — "Chef's Bottle Olive Oil" legitimately
+   *      contains "bottle" and is a correct match for "bottle olive oil".
+   *   3. Cascade through locationIds[1..N] with both query variants.
    *
-   * Returns the first priced match encountered, along with the locationId where
+   * Returns the first priced match encountered along with the locationId where
    * it was actually found (for downstream UI and URL attribution).
    */
   async getPriceForIngredient(
@@ -109,9 +110,13 @@ export class KrogerClient {
     const locations = Array.isArray(locationIds) ? locationIds : [locationIds]
     if (!locations.length) return null
 
+    // Try stripped BEFORE raw. Stripped queries are generally more focused —
+    // "head garlic" → "garlic" returns whole garlic bulbs; raw "head garlic"
+    // returns Boar's Head garlic hummus. When stripping is a no-op (no noise
+    // words present) we skip directly to the raw query.
     const stripped = stripUnitNoise(ingredientName)
     const queries = stripped && stripped !== ingredientName
-      ? [ingredientName, stripped]
+      ? [stripped, ingredientName]
       : [ingredientName]
 
     for (const locationId of locations) {
@@ -122,9 +127,9 @@ export class KrogerClient {
         const priced = firstPriced(products)
         if (priced) {
           if (query !== ingredientName) {
-            console.log(`[kroger] "${ingredientName}" → "${query}" matched ${priced.description} at ${locationId}`)
+            console.log(`[kroger] "${ingredientName}" → stripped "${query}" matched "${priced.description}" at ${locationId}`)
           } else if (locationId !== locations[0]) {
-            console.log(`[kroger] "${ingredientName}" fell back to location ${locationId} (primary had no priced match)`)
+            console.log(`[kroger] "${ingredientName}" fell back to location ${locationId}`)
           }
           return {
             sku: priced.items![0]!.itemId,
@@ -154,9 +159,11 @@ function firstPriced(products: KrogerProduct[]): KrogerProduct | null {
 }
 
 /**
- * Strip common unit / packaging / quantity words from an ingredient query.
+ * Strip unit / packaging / quantity words from an ingredient query.
  * "1 head garlic" → "garlic"; "2 cans tomato paste" → "tomato paste".
- * Leaves the core product name. Used as a fallback when literal query fails.
+ *
+ * Does NOT strip semantic modifiers like "fresh" or "organic" — those change
+ * the product the user is asking for. Only strips counts and container words.
  */
 function stripUnitNoise(raw: string): string {
   const noise = new Set([
@@ -169,7 +176,9 @@ function stripUnitNoise(raw: string): string {
     'gallon', 'gallons', 'qt', 'quart', 'quarts',
     'pt', 'pint', 'pints', 'cup', 'cups',
     'tbsp', 'tablespoon', 'tsp', 'teaspoon',
-    'dozen', 'dozens', 'fresh', 'organic'
+    'dozen', 'dozens'
+    // Intentionally NOT stripped: 'fresh', 'organic', 'whole' — these are
+    // product-selecting modifiers, not packaging noise.
   ])
   return raw
     .toLowerCase()
