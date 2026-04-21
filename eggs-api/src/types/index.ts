@@ -49,6 +49,17 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET: string
 }
 
+// ─── UserProfile — minimal shape consumed by selectWinner and plan route ─────
+
+/**
+ * Subset of DbUser fields needed for best-value selection and plan generation.
+ * Satisfies by DbUser (all fields present) — no runtime conversion required.
+ */
+export interface UserProfile {
+  avoid_brands: string[]
+  avoid_stores?: string[]
+}
+
 // ─── DB / User types ─────────────────────────────────────────────────────────
 
 export interface DbUser {
