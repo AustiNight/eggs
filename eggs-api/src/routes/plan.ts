@@ -22,6 +22,7 @@ import { rateLimit } from '../middleware/ratelimit.js'
 import { getProvider, type AnthropicTool } from '../providers/index.js'
 import { KrogerClient } from '../integrations/kroger.js'
 import { WalmartClient } from '../integrations/walmart.js'
+import { IdpClient } from '../integrations/instacart-idp.js'
 import { getShopUrl, normalizeBanner } from '../integrations/store-urls.js'
 import { validateUrls } from '../lib/url-validator.js'
 import type { StoreSearchResult } from '../integrations/StoreAdapter.js'
@@ -819,6 +820,26 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     total = Math.round((subtotal + tax) * 100) / 100
   }
 
+  // ── M11: Instacart Recipe Page API — fire-and-forget ────────────────────
+  // Attach a shoppable Instacart URL to the plan when INSTACART_IDP_API_KEY is
+  // configured.  Fails silently: a failed IDP call never blocks plan delivery.
+  // Only runs on the SHOPPING_V2 path (resolvedSpecs required); skip on legacy.
+  let instacartUrl: string | undefined
+  if (c.env.INSTACART_IDP_API_KEY && resolvedSpecs && resolvedSpecs.length > 0) {
+    try {
+      const idp = new IdpClient({ apiKey: c.env.INSTACART_IDP_API_KEY })
+      const idpTitle = `E.G.G.S. Shopping List — ${new Date().toISOString().slice(0, 10)}`
+      // planId is not yet assigned (assigned below); use a stable temporary value.
+      // The UUID is generated further down; we pass a placeholder linkback that
+      // will be embedded in the stored plan for display purposes.
+      const idpLinkback = 'https://eggs.app'
+      const idpResult = await idp.createShoppingListPage(resolvedSpecs, idpTitle, idpLinkback)
+      instacartUrl = idpResult.productsLinkUrl
+    } catch (err) {
+      console.warn('[plan] Instacart IDP call failed, continuing without link:', err)
+    }
+  }
+
   // ── Narrative summary ────────────────────────────────────────────────────
   let planNarrative = ''
   try {
@@ -889,7 +910,9 @@ Write only the summary paragraph, no preamble.`
       estimatedPriceCount: estimatedCount
     },
     // M9: attach winners for the best-basket UI (only on SHOPPING_V2 plans)
-    ...(planWinners ? { winners: planWinners } : {})
+    ...(planWinners ? { winners: planWinners } : {}),
+    // M11: Instacart Recipe Page URL (absent when IDP key is missing or call failed)
+    ...(instacartUrl ? { instacartUrl } : {})
   }
 
   // Persist plan

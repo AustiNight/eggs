@@ -53,6 +53,12 @@ export interface Env {
    * Absence or any other value keeps the legacy behaviour.
    */
   SHOPPING_V2?: string
+  /**
+   * Instacart Developer Platform (IDP) API key.
+   * Obtain at https://developers.instacart.com (self-serve, no approval needed).
+   * When absent the "Shop this list on Instacart" button is silently skipped.
+   */
+  INSTACART_IDP_API_KEY?: string
 }
 
 // ─── UserProfile — minimal shape consumed by selectWinner and plan route ─────
@@ -275,6 +281,12 @@ export interface ShoppingPlan {
    * Populated in M9+ for SHOPPING_V2 plans. Absent on legacy plans.
    */
   winners?: import('../lib/bestValue.js').WinnerResult[]
+  /**
+   * Instacart Recipe Page URL for the full shopping list.
+   * Present on M11+ plans when INSTACART_IDP_API_KEY is configured and the
+   * IDP call succeeded. Absent otherwise — the button should not render.
+   */
+  instacartUrl?: string
 }
 
 // ─── Request / Response types ─────────────────────────────────────────────────

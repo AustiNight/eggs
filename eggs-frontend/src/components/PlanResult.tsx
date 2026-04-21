@@ -144,6 +144,19 @@ function BestBasketView({ plan, winners, onReset, eventId, getToken }: BestBaske
             )}
           </div>
         </div>
+        {plan.instacartUrl && (
+          <div className="mt-4 relative z-10">
+            <a
+              href={plan.instacartUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#43B02A] px-4 py-2 text-sm font-medium text-white hover:bg-[#3a9a24] transition"
+            >
+              <span>🛒</span>
+              Shop this list on Instacart
+            </a>
+          </div>
+        )}
       </div>
 
       {/* Best basket list */}

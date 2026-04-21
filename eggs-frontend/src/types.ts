@@ -186,6 +186,11 @@ export interface ShoppingPlan {
   }
   /** Per-item best-value winners — present on M9+ SHOPPING_V2 plans. */
   winners?: WinnerResult[]
+  /**
+   * Instacart Recipe Page URL — present on M11+ plans when the IDP call
+   * succeeded. Renders the "Shop this list on Instacart" button when truthy.
+   */
+  instacartUrl?: string
 }
 
 export interface ShoppingItem {
