@@ -6,8 +6,10 @@ import type {
   StorePlan,
   StoreItem,
   IngredientLine,
-  KrogerLocation
+  KrogerLocation,
+  CanonicalUnit
 } from '../types/index.js'
+import { CANONICAL_UNITS } from '../types/spec.js'
 import { getSupabase } from '../db/client.js'
 import { requireAuthOrServiceKey } from '../middleware/auth.js'
 import { enforceFreeLimit } from '../middleware/limits.js'
@@ -110,6 +112,40 @@ async function searchWalmart(
   return items
 }
 
+// ── Pure helper: validate + normalize AI-returned items (M5) ────────────────
+// Extracted so it can be unit-tested without invoking the Anthropic SDK.
+// Applies two post-processing passes:
+//   1. pricedSize.unit validation — unknown units cause pricedSize to be nulled.
+//   2. Confidence downgrade — 'real' or 'estimated_with_source' items with a
+//      null pricedSize (after pass 1) are downgraded to 'estimated'.
+export function validateAndNormalizeAiItems(rawItems: unknown[]): StoreItem[] {
+  const validUnits = new Set<string>(CANONICAL_UNITS)
+
+  return rawItems.map((raw) => {
+    const item = raw as StoreItem & { pricedSize?: { quantity: number; unit: string } | null }
+
+    // Validate pricedSize.unit against CANONICAL_UNITS; null out on invalid unit.
+    let pricedSize: { quantity: number; unit: CanonicalUnit } | null = null
+    if (item.pricedSize != null) {
+      if (validUnits.has(item.pricedSize.unit)) {
+        pricedSize = { quantity: item.pricedSize.quantity, unit: item.pricedSize.unit as CanonicalUnit }
+      } else {
+        console.warn(`[ai-adapter] unknown pricedSize.unit "${item.pricedSize.unit}" for ${item.name} — nulling pricedSize`)
+        pricedSize = null
+      }
+    }
+
+    // Confidence downgrade when pricedSize is missing on non-estimated items.
+    let confidence = item.confidence
+    if ((confidence === 'real' || confidence === 'estimated_with_source') && pricedSize === null) {
+      console.warn(`[ai-adapter] downgrading ${item.name} from ${confidence} to 'estimated' — pricedSize missing`)
+      confidence = 'estimated'
+    }
+
+    return { ...item, pricedSize, confidence } as StoreItem
+  })
+}
+
 // ── AI: search all non-API stores for ALL ingredients (cache-first) ──────────
 async function searchNonApiStores(
   ingredients: IngredientLine[],
@@ -153,7 +189,7 @@ async function searchNonApiStores(
 
   const recordShoppingPlanTool: AnthropicTool = {
     name: 'record_shopping_plan',
-    description: 'Emit the final structured shopping plan.',
+    description: 'Emit the final structured shopping plan. For every item, report pricedSize — the package size YOU actually priced, not the user\'s input unit. Example: user asked for "2 lbs chicken breast" but you priced a 2.5 lb family pack from Whole Foods → pricedSize = { quantity: 2.5, unit: "lb" }. If you have no source (confidence=estimated), pricedSize may be null.',
     input_schema: {
       type: 'object',
       required: ['stores'],
@@ -176,7 +212,7 @@ async function searchNonApiStores(
                 type: 'array',
                 items: {
                   type: 'object',
-                  required: ['ingredientId', 'name', 'quantity', 'unit', 'unitPrice', 'lineTotal', 'confidence', 'isLoyaltyPrice'],
+                  required: ['ingredientId', 'name', 'quantity', 'unit', 'unitPrice', 'lineTotal', 'confidence', 'isLoyaltyPrice', 'pricedSize'],
                   properties: {
                     ingredientId: { type: 'string' },
                     name: { type: 'string' },
@@ -188,7 +224,20 @@ async function searchNonApiStores(
                     confidence: { type: 'string', enum: ['real', 'estimated_with_source', 'estimated'] },
                     proofUrl: { type: ['string', 'null'], description: 'Must be one of the citation URLs from the research pass. Never fabricate.' },
                     isLoyaltyPrice: { type: 'boolean' },
-                    nonMemberPrice: { type: ['number', 'null'] }
+                    nonMemberPrice: { type: ['number', 'null'] },
+                    pricedSize: {
+                      type: ['object', 'null'],
+                      description: 'The actual package size the model priced. REQUIRED when confidence is "real" or "estimated_with_source". Can be null only when confidence is "estimated" (pure guess with no source).',
+                      properties: {
+                        quantity: { type: 'number', description: 'e.g. 32 for a 32 oz jug' },
+                        unit: {
+                          type: 'string',
+                          enum: ['g', 'kg', 'ml', 'l', 'oz', 'lb', 'fl_oz', 'cup', 'pt', 'qt', 'gal', 'each', 'dozen', 'bunch', 'head', 'clove', 'pinch'],
+                          description: 'Canonical unit used by E.G.G.S.'
+                        }
+                      },
+                      required: ['quantity', 'unit']
+                    }
                   }
                 }
               },
@@ -315,9 +364,15 @@ Emit the shopping plan now via record_shopping_plan.`
     return []
   }
 
-  const input = recordCall.input as { stores?: StorePlan[] } | null
-  const stores = input?.stores ?? []
-  console.log('[searchNonApiStores pass2] record_shopping_plan returned', stores.length, 'stores')
+  const input = recordCall.input as { stores?: unknown[] } | null
+  const rawStores = input?.stores ?? []
+  console.log('[searchNonApiStores pass2] record_shopping_plan returned', rawStores.length, 'stores')
+
+  // Apply per-item validation + pricedSize normalization (M5) then cast to StorePlan[].
+  const stores = rawStores.map((rawStore) => {
+    const s = rawStore as StorePlan & { items: unknown[] }
+    return { ...s, items: validateAndNormalizeAiItems(Array.isArray(s.items) ? s.items : []) }
+  }) as StorePlan[]
 
   // Cross-reference: any proofUrl the model put on items must appear in pass-1
   // citations. URLs not in citations are treated as fabricated and dropped.
@@ -476,7 +531,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           productUrl: kr.productUrl,
           proofUrl: kr.productUrl,
           isLoyaltyPrice: kr.promoPrice !== null && kr.promoPrice < kr.regularPrice,
-          nonMemberPrice: kr.promoPrice !== null ? kr.regularPrice : undefined
+          nonMemberPrice: kr.promoPrice !== null ? kr.regularPrice : undefined,
+          pricedSize: null
         })
       } else {
         krogerItems.push({
@@ -493,7 +549,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           proofUrl: undefined,
           isLoyaltyPrice: false,
           nonMemberPrice: undefined,
-          notAvailable: true
+          notAvailable: true,
+          pricedSize: null
         })
       }
     }
@@ -539,7 +596,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           productUrl: wm.productUrl,
           proofUrl: wm.productUrl,
           isLoyaltyPrice: wm.promoPrice !== null && wm.promoPrice < wm.regularPrice,
-          nonMemberPrice: wm.promoPrice !== null ? wm.regularPrice : undefined
+          nonMemberPrice: wm.promoPrice !== null ? wm.regularPrice : undefined,
+          pricedSize: null
         })
       } else {
         walmartItems.push({
@@ -556,7 +614,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           proofUrl: undefined,
           isLoyaltyPrice: false,
           nonMemberPrice: undefined,
-          notAvailable: true
+          notAvailable: true,
+          pricedSize: null
         })
       }
     }
@@ -665,7 +724,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           proofUrl: undefined,
           isLoyaltyPrice: false,
           nonMemberPrice: undefined,
-          notAvailable: true
+          notAvailable: true,
+          pricedSize: null
         })
       }
     }

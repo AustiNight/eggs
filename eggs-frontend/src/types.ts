@@ -93,6 +93,12 @@ export interface StoreItem {
   isLoyaltyPrice: boolean
   nonMemberPrice?: number
   notAvailable?: boolean
+  /**
+   * The actual package size the AI priced. Non-null for confidence 'real' and
+   * 'estimated_with_source'; may be null for 'estimated'. Added in M5.
+   * UI surfaces (M9) will use this for price-per-unit display.
+   */
+  pricedSize?: { quantity: number; unit: string } | null
 }
 
 export interface ShoppingPlanRecord {

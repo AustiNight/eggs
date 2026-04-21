@@ -18,7 +18,7 @@ type _Assert<T extends true> = T
 
 // ─── Re-use CanonicalUnit values as a zod enum ───────────────────────────────
 
-const CANONICAL_UNITS = [
+export const CANONICAL_UNITS = [
   'g', 'kg',
   'ml', 'l',
   'oz', 'lb',

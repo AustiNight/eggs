@@ -190,6 +190,12 @@ export interface StoreItem {
   nonMemberPrice?: number
   /** True when this store doesn't carry the item — included to keep schema uniform across stores */
   notAvailable?: boolean
+  /**
+   * The actual package size the AI priced (e.g. a 2.5 lb family pack, not the user's "2 lb"
+   * input). Non-null for confidence 'real' and 'estimated_with_source'; may be null for
+   * confidence 'estimated' (pure guess with no source). Added in M5.
+   */
+  pricedSize: { quantity: number; unit: CanonicalUnit } | null
 }
 
 export interface StorePlan {
