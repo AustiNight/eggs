@@ -7,9 +7,11 @@ import type {
   StoreItem,
   IngredientLine,
   KrogerLocation,
-  CanonicalUnit
+  CanonicalUnit,
+  UserProfile
 } from '../types/index.js'
 import { CANONICAL_UNITS } from '../types/spec.js'
+import { computeBestBasketTotal } from '../lib/planTotals.js'
 import { getSupabase } from '../db/client.js'
 import { requireAuthOrServiceKey } from '../middleware/auth.js'
 import { enforceFreeLimit } from '../middleware/limits.js'
@@ -749,11 +751,44 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   const finalStores = allStores.slice(0, body.settings.maxStores)
 
   const allItems: StoreItem[] = finalStores.flatMap(s => s.items.filter(i => !i.notAvailable))
-  const subtotal = finalStores.reduce((s, st) => s + st.subtotal, 0)
-  const tax = finalStores.reduce((s, st) => s + st.estimatedTax, 0)
-  const total = Math.round((subtotal + tax) * 100) / 100
   const realCount = allItems.filter(i => i.confidence === 'real').length
   const estimatedCount = allItems.filter(i => i.confidence !== 'real').length
+
+  // ── Totals: SHOPPING_V2 uses best-basket selector; legacy sums all stores ──
+  let subtotal: number
+  let tax: number
+  let total: number
+  let bestBasketTotal: number | null = null
+
+  if (c.env.SHOPPING_V2 === 'true') {
+    // Build an interim plan-shaped object for computeBestBasketTotal.
+    // specs are not yet persisted at this point in the route (M8 write path),
+    // so this uses the synthesize-from-store-items fallback inside extractSpecs.
+    const interimPlan: ShoppingPlan = {
+      id: crypto.randomUUID(),
+      generatedAt: new Date().toISOString(),
+      meta: {
+        location: body.location,
+        storesQueried: finalStores.map(s => ({ name: s.storeName, source: s.priceSource })),
+        modelUsed: '',
+        budgetMode: body.budget?.mode ?? 'calculate',
+      },
+      ingredients,
+      stores: finalStores,
+      summary: { subtotal: 0, estimatedTax: 0, total: 0, realPriceCount: 0, estimatedPriceCount: 0 },
+    }
+    const userProfile: UserProfile = { avoid_brands: user?.avoid_brands ?? [] }
+    const bestBasket = computeBestBasketTotal(interimPlan, userProfile)
+    subtotal = bestBasket.subtotal
+    tax = bestBasket.estimatedTax
+    total = bestBasket.total
+    bestBasketTotal = total
+  } else {
+    // Legacy: sum every store's subtotal (known to 4.5× inflate the total)
+    subtotal = finalStores.reduce((s, st) => s + st.subtotal, 0)
+    tax = finalStores.reduce((s, st) => s + st.estimatedTax, 0)
+    total = Math.round((subtotal + tax) * 100) / 100
+  }
 
   // ── Narrative summary ────────────────────────────────────────────────────
   let planNarrative = ''
@@ -832,7 +867,8 @@ Write only the summary paragraph, no preamble.`
       event_id: body.eventId ?? null,
       user_id: userId,
       plan_data: shoppingPlan,
-      model_used: shoppingPlan.meta.modelUsed
+      model_used: shoppingPlan.meta.modelUsed,
+      best_basket_total: bestBasketTotal  // null for legacy path; numeric for SHOPPING_V2 path
     })
     .select()
     .single()

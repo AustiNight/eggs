@@ -47,6 +47,12 @@ export interface Env {
   WALMART_BASE_URL?: string
   TAPESTRY_SERVICE_KEY: string
   STRIPE_WEBHOOK_SECRET: string
+  /**
+   * Feature flag for the shopping-plan v2 best-value path.
+   * Set to 'true' to enable M8+ totals correction and best-basket selection.
+   * Absence or any other value keeps the legacy behaviour.
+   */
+  SHOPPING_V2?: string
 }
 
 // ─── UserProfile — minimal shape consumed by selectWinner and plan route ─────
@@ -134,6 +140,8 @@ export interface DbShoppingPlan {
   plan_data: ShoppingPlan
   model_used: string | null
   generated_at: string
+  /** Null for legacy plans written before M8. Computed at read time for those rows. */
+  best_basket_total: number | null
 }
 
 export interface DbReconcileRecord {
@@ -245,6 +253,11 @@ export interface ShoppingPlan {
     budgetMode: 'ceiling' | 'calculate'
     budgetCeiling?: number
     budgetExceeded?: boolean
+    /**
+     * Resolved ShoppableItemSpecs — introduced in M6/M7, persisted in M8+.
+     * Absent on legacy plans written before M8.
+     */
+    specs?: import('./spec.js').ShoppableItemSpec[]
   }
   ingredients: IngredientLine[]
   stores: StorePlan[]
