@@ -110,6 +110,24 @@ describe('validateSpec — invariant: quantity > 0', () => {
     const bad = { ...validBrandLocked, quantity: -1 }
     expect(() => validateSpec(bad)).toThrow()
   })
+
+  it('rejects quantity === NaN', () => {
+    const bad = { ...validBrandLocked, quantity: NaN }
+    expect(() => validateSpec(bad)).toThrow()
+  })
+
+  it('rejects quantity === Infinity', () => {
+    const bad = { ...validBrandLocked, quantity: Infinity }
+    expect(() => validateSpec(bad)).toThrow()
+  })
+})
+
+// ─── Error message format ─────────────────────────────────────────────────────
+
+describe('validateSpec — error message format', () => {
+  it('error message includes the failing field path and reason', () => {
+    expect(() => validateSpec({ ...validBrandLocked, quantity: 0 })).toThrow(/quantity/)
+  })
 })
 
 // ─── Invariant 3: unit ∈ CanonicalUnit ───────────────────────────────────────
@@ -184,6 +202,16 @@ describe('toInstacartLineItem', () => {
     // validBrandLocked has sourceText='Fairlife whole milk', displayName='whole milk'
     const line = toInstacartLineItem(validBrandLocked)
     expect(line.display_text).toBe('Fairlife whole milk')
+  })
+
+  it('omits display_text when sourceText differs from displayName only by surrounding whitespace', () => {
+    const spec: ShoppableItemSpec = {
+      ...validBrandLocked,
+      sourceText: '  whole milk ',
+      displayName: 'whole milk',
+    }
+    const line = toInstacartLineItem(spec)
+    expect(line.display_text).toBeUndefined()
   })
 
   it('passes through unit as a single-element line_item_measurements array', () => {

@@ -11,6 +11,11 @@
 import { z } from 'zod'
 import type { CanonicalUnit } from './index.js'
 
+// ─── Compile-time assertion helper ───────────────────────────────────────────
+// _Assert<T extends true> fails with "Type 'never' does not satisfy the
+// constraint 'true'" when T resolves to never, giving us real tsc errors.
+type _Assert<T extends true> = T
+
 // ─── Re-use CanonicalUnit values as a zod enum ───────────────────────────────
 
 const CANONICAL_UNITS = [
@@ -24,11 +29,13 @@ const CANONICAL_UNITS = [
 
 // Type-level check: every value in our constant array must be assignable to
 // CanonicalUnit (caught at compile time if the two lists drift).
-type _VerifyCanonicalUnitsComplete = (typeof CANONICAL_UNITS)[number] extends CanonicalUnit
-  ? CanonicalUnit extends (typeof CANONICAL_UNITS)[number]
-    ? true
+type _VerifyCanonicalUnitsComplete = _Assert<
+  (typeof CANONICAL_UNITS)[number] extends CanonicalUnit
+    ? CanonicalUnit extends (typeof CANONICAL_UNITS)[number]
+      ? true
+      : never
     : never
-  : never
+>
 
 // ─── ResolutionConfidence ─────────────────────────────────────────────────────
 
@@ -57,7 +64,7 @@ const ShoppableItemSpecSchema = z
     brand: z.string().nullable(),
     brandLocked: z.boolean(),
 
-    quantity: z.number().gt(0),
+    quantity: z.number().positive().finite(),
     unit: z.enum(CANONICAL_UNITS),
     attributes: z.record(z.string(), z.string()).optional(),
 
@@ -69,17 +76,11 @@ const ShoppableItemSpecSchema = z
     const brandIsNull = data.brand === null
     const brandIsLocked = data.brandLocked === true
     if (brandIsNull && brandIsLocked) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['brandLocked'],
-        message: 'brandLocked must be false when brand is null',
-      })
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['brand'],       message: 'brand must not be null when brandLocked is true' })
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['brandLocked'], message: 'brandLocked must be false when brand is null' })
     } else if (!brandIsNull && !brandIsLocked) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['brandLocked'],
-        message: 'brandLocked must be true when brand is a non-null string',
-      })
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['brand'],       message: 'brand must be null when brandLocked is false' })
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['brandLocked'], message: 'brandLocked must be true when brand is set' })
     }
   })
 
@@ -113,12 +114,14 @@ export interface ShoppableItemSpec {
 
 // Type-level assertion: ShoppableItemSpec and the zod inferred type must be
 // mutually assignable. If either drifts from the other this line will fail to
-// compile.
-type _Verify = ShoppableItemSpec extends z.infer<typeof ShoppableItemSpecSchema>
-  ? z.infer<typeof ShoppableItemSpecSchema> extends ShoppableItemSpec
-    ? true
+// compile with "Type 'never' does not satisfy the constraint 'true'".
+type _VerifyShape = _Assert<
+  ShoppableItemSpec extends z.infer<typeof ShoppableItemSpecSchema>
+    ? z.infer<typeof ShoppableItemSpecSchema> extends ShoppableItemSpec
+      ? true
+      : never
     : never
-  : never
+>
 
 export interface InstacartLineItem {
   name: string                       // = displayName
@@ -141,7 +144,7 @@ export function validateSpec(x: unknown): ShoppableItemSpec {
       .join('; ')
     throw new Error(`ShoppableItemSpec validation failed: ${issues}`)
   }
-  return result.data as ShoppableItemSpec
+  return result.data
 }
 
 // ─── toInstacartLineItem ──────────────────────────────────────────────────────
@@ -156,8 +159,9 @@ export function toInstacartLineItem(spec: ShoppableItemSpec): InstacartLineItem 
     line_item_measurements: [{ quantity: spec.quantity, unit: spec.unit }],
   }
 
-  // Omit display_text when it conveys the same info as name
-  if (spec.sourceText !== spec.displayName) {
+  // Omit display_text when it conveys the same info as name (trim before compare
+  // so trailing/leading whitespace differences are not treated as meaningful).
+  if (spec.sourceText.trim() !== spec.displayName.trim()) {
     item.display_text = spec.sourceText
   }
 
