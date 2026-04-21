@@ -767,6 +767,10 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   let planWinners: WinnerResult[] | undefined
   let resolvedSpecs: ShoppableItemSpec[] | undefined
 
+  // Generate the plan ID up-front so the IDP linkback can deep-link to it
+  // and shoppingPlan.id reuses the same value.
+  const planId = crypto.randomUUID()
+
   if (c.env.SHOPPING_V2 === 'true') {
     const userProfile: UserProfile = {
       // Request-first to match the AI-prompt helper's order (line ~165) — the
@@ -790,7 +794,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     if (!resolvedSpecs || resolvedSpecs.length === 0) {
       // Build a minimal interim plan so extractSpecs can synthesize from store items.
       const interimPlan: ShoppingPlan = {
-        id: crypto.randomUUID(),
+        id: planId,
         generatedAt: new Date().toISOString(),
         meta: {
           location: body.location,
@@ -830,11 +834,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     try {
       const idp = new IdpClient({ apiKey: c.env.INSTACART_IDP_API_KEY })
       const idpTitle = `E.G.G.S. Shopping List — ${new Date().toISOString().slice(0, 10)}`
-      // TODO: generate planId (crypto.randomUUID()) before this block so the
-      // linkback can be `https://eggs.app/plan/{planId}` per DESIGN.md §III.
-      // Current placeholder works for the button render but loses the deep-link
-      // back to the specific plan.
-      const idpLinkback = 'https://eggs.app'
+      const idpLinkback = `https://eggs.app/plan/${planId}`
       const idpResult = await idp.createShoppingListPage(resolvedSpecs, idpTitle, idpLinkback)
       instacartUrl = idpResult.productsLinkUrl
     } catch (err) {
@@ -884,7 +884,7 @@ Write only the summary paragraph, no preamble.`
   const modelUsed = `claude-haiku-4-5 + kroger_api${walmartClient ? ' + walmart_api' : ''} + web_search + web_fetch (parallel, cached)`
 
   const shoppingPlan: ShoppingPlan = {
-    id: crypto.randomUUID(),
+    id: planId,
     generatedAt: new Date().toISOString(),
     meta: {
       eventId: body.eventId,
