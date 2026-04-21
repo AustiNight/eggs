@@ -7,25 +7,10 @@
 import React, { useState } from 'react'
 import { ShoppingCart, Car, ExternalLink, FileText, AlertCircle, Tag, ChevronDown, ChevronRight } from 'lucide-react'
 import type { StorePlan, StoreItem } from '../types'
+import { ConfidenceBadge } from './ConfidenceBadge'
 
 interface PerStorePanelsProps {
   stores: StorePlan[]
-}
-
-const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
-  real:                   { label: 'Live',      color: '#34d399' },
-  estimated_with_source:  { label: 'Sourced',   color: '#fbbf24' },
-  estimated:              { label: 'Est.',       color: '#94a3b8' }
-}
-
-function ConfidenceBadge({ confidence }: { confidence: string }) {
-  const { label, color } = SOURCE_LABELS[confidence] ?? SOURCE_LABELS.estimated
-  return (
-    <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded"
-      style={{ color, backgroundColor: `${color}18`, border: `1px solid ${color}30` }}>
-      {label}
-    </span>
-  )
 }
 
 function ItemRow({ item }: { item: StoreItem }) {
@@ -212,7 +197,7 @@ const PerStorePanels: React.FC<PerStorePanelsProps> = ({ stores }) => {
       {sectionOpen && (
         <div className="mt-4 space-y-4">
           {stores.map((store, idx) => (
-            <StoreCard key={store.storeName + idx} store={store} idx={idx} />
+            <StoreCard key={store.storeName} store={store} idx={idx} />
           ))}
         </div>
       )}

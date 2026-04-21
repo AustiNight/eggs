@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { Globe, Activity, DollarSign, ArrowRight } from 'lucide-react'
 import type { ShoppingPlan, WinnerResult, Candidate } from '../types'
 import { updateEvent } from '../lib/api'
+import { TAX_RATE, round2, computeDisplayedTotal } from '../lib/planTotalsView'
 import LegacyPlanView from './LegacyPlanView'
 import BestBasketList from './BestBasketList'
 import PerStorePanels from './PerStorePanels'
@@ -23,12 +24,6 @@ interface PlanResultProps {
   /** Present when rendered from an event flow — enables "Mark Shopping Complete" button. */
   eventId?: string
   getToken?: () => Promise<string | null>
-}
-
-const TAX_RATE = 0.0825
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
 }
 
 // ─── Mark Shopping Complete button ────────────────────────────────────────────
@@ -70,25 +65,29 @@ interface BestBasketViewProps {
 }
 
 function BestBasketView({ plan, winners, onReset, eventId, getToken }: BestBasketViewProps) {
-  // winnerOverrides: spec.id → user-selected Candidate (overrides the server winner)
-  const [winnerOverrides, setWinnerOverrides] = useState<Record<string, Candidate | null>>({})
+  // winnerOverrides: spec.id → user-selected Candidate (overrides the server winner).
+  // Key is deleted (not set to null) when the user swaps back to the original winner.
+  const [winnerOverrides, setWinnerOverrides] = useState<Record<string, Candidate>>({})
 
   const handleSwap = (specId: string, candidate: Candidate) => {
-    setWinnerOverrides(prev => ({ ...prev, [specId]: candidate }))
+    const winnerResult = winners.find(w => w.spec.id === specId)
+    const isOriginalWinner = winnerResult?.winner && candidate === winnerResult.winner
+    setWinnerOverrides((prev) => {
+      const next = { ...prev }
+      if (isOriginalWinner) {
+        delete next[specId]
+      } else {
+        next[specId] = candidate
+      }
+      return next
+    })
   }
 
   // Compute displayed total from current overrides
-  const displayedTotal = useMemo(() => {
-    let sub = 0
-    for (const wr of winners) {
-      const specId = wr.spec.id
-      const current = specId in winnerOverrides
-        ? winnerOverrides[specId]
-        : wr.winner
-      sub += current?.item.lineTotal ?? 0
-    }
-    return round2(round2(sub) * (1 + TAX_RATE))
-  }, [winnerOverrides, winners])
+  const displayedTotal = useMemo(
+    () => computeDisplayedTotal(winners, winnerOverrides),
+    [winnerOverrides, winners]
+  )
 
   const savings = plan.summary.estimatedSavings ?? 0
 

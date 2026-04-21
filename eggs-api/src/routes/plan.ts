@@ -10,7 +10,8 @@ import type {
   CanonicalUnit,
   UserProfile
 } from '../types/index.js'
-import { CANONICAL_UNITS } from '../types/spec.js'
+import { CANONICAL_UNITS, validateSpecInput } from '../types/spec.js'
+import type { ShoppableItemSpec } from '../types/spec.js'
 import { computeBestBasketTotal, extractSpecs } from '../lib/planTotals.js'
 import { selectWinner } from '../lib/bestValue.js'
 import type { WinnerResult } from '../lib/bestValue.js'
@@ -762,7 +763,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   let total: number
   let bestBasketTotal: number | null = null
   let planWinners: WinnerResult[] | undefined
-  let resolvedSpecs: import('../types/spec.js').ShoppableItemSpec[] | undefined
+  let resolvedSpecs: ShoppableItemSpec[] | undefined
 
   if (c.env.SHOPPING_V2 === 'true') {
     const userProfile: UserProfile = {
@@ -777,8 +778,14 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     // M9: Use body.resolvedSpecs if the caller provided them (from /api/clarify),
     // else fall back to extractSpecs on an interim plan constructed from store results.
     if (body.resolvedSpecs && body.resolvedSpecs.length > 0) {
-      resolvedSpecs = body.resolvedSpecs
-    } else {
+      try {
+        resolvedSpecs = body.resolvedSpecs.map(validateSpecInput) as ShoppableItemSpec[]
+      } catch (err) {
+        console.warn('[plan] resolvedSpecs validation failed, falling back to extractSpecs:', err)
+        // Fall through to extractSpecs below
+      }
+    }
+    if (!resolvedSpecs || resolvedSpecs.length === 0) {
       // Build a minimal interim plan so extractSpecs can synthesize from store items.
       const interimPlan: ShoppingPlan = {
         id: crypto.randomUUID(),

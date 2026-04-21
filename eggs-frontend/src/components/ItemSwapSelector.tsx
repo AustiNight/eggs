@@ -16,10 +16,18 @@ interface ItemSwapSelectorProps {
   onClose: () => void
 }
 
-function pricePerBaseLabel(ppb: number | null): string {
+function baseLabel(unit: string | undefined): string {
+  if (!unit) return 'ea'
+  const mass = ['g', 'kg', 'oz', 'lb']
+  const vol = ['ml', 'l', 'fl_oz', 'cup', 'pt', 'qt', 'gal']
+  if (mass.includes(unit)) return 'g'
+  if (vol.includes(unit)) return 'ml'
+  return 'ea'
+}
+
+function pricePerBaseLabel(ppb: number | null, unit: string | undefined): string {
   if (ppb === null) return ''
-  // ppb is price per base unit (g / ml / count). Show 2 sig figs for readability.
-  return `$${ppb.toFixed(4)}/base`
+  return `$${ppb.toFixed(4)}/${baseLabel(unit)}`
 }
 
 const ItemSwapSelector: React.FC<ItemSwapSelectorProps> = ({
@@ -95,7 +103,7 @@ const ItemSwapSelector: React.FC<ItemSwapSelectorProps> = ({
                   <div className="text-xs text-slate-500 mt-0.5">
                     Package: {c.parsedSize.quantity} {c.parsedSize.unit}
                     {c.pricePerBase !== null && (
-                      <span className="ml-2 text-slate-600">{pricePerBaseLabel(c.pricePerBase)}</span>
+                      <span className="ml-2 text-slate-600">{pricePerBaseLabel(c.pricePerBase, c.parsedSize?.unit)}</span>
                     )}
                   </div>
                 )}

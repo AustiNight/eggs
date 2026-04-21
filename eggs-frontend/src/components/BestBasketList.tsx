@@ -16,14 +16,14 @@ import ItemSwapSelector from './ItemSwapSelector'
 interface BestBasketListProps {
   winners: WinnerResult[]
   /** Overrides map from PlanResult state — keyed by spec.id */
-  winnerOverrides: Record<string, Candidate | null>
+  winnerOverrides: Record<string, Candidate>
   onSwap: (specId: string, candidate: Candidate) => void
 }
 
 /** Warning tooltip text per DESIGN.md */
 function warningTooltip(warning: WinnerResult['warning'], brand: string | null): string {
   if (warning === 'avoid_brand_lock_conflict') {
-    return `You've set ${brand ?? 'this brand'} on your avoid list. Respecting your explicit brand choice.`
+    return `You've set ${brand ?? 'this brand'} on your avoid list. Respecting your explicit choice.`
   }
   if (warning === 'all_avoided_fallback') {
     return 'All candidates for this item were on your avoid list. Showing the cheapest available.'

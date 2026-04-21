@@ -10,6 +10,7 @@ import { ShoppingCart, Car, DollarSign, ArrowRight, Globe, Activity, Tag, Extern
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import type { ShoppingPlan, StorePlan, StoreItem } from '../types'
 import { updateEvent } from '../lib/api'
+import { ConfidenceBadge } from './ConfidenceBadge'
 
 interface LegacyPlanViewProps {
   plan: ShoppingPlan
@@ -19,22 +20,6 @@ interface LegacyPlanViewProps {
 }
 
 const COLORS = ['#fbbf24', '#f97316', '#34d399', '#60a5fa', '#a78bfa']
-
-const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
-  real:                   { label: 'Live',      color: '#34d399' },
-  estimated_with_source:  { label: 'Sourced',   color: '#fbbf24' },
-  estimated:              { label: 'Est.',       color: '#94a3b8' }
-}
-
-function ConfidenceBadge({ confidence }: { confidence: string }) {
-  const { label, color } = SOURCE_LABELS[confidence] ?? SOURCE_LABELS.estimated
-  return (
-    <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded"
-      style={{ color, backgroundColor: `${color}18`, border: `1px solid ${color}30` }}>
-      {label}
-    </span>
-  )
-}
 
 function ItemRow({ item }: { item: StoreItem }) {
   if (item.notAvailable) {

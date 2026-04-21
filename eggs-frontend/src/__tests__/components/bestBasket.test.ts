@@ -5,50 +5,16 @@
  *   1. resolveWinner respects explicit override
  *   2. resolveWinner falls back to plan winner when no override
  *   3. resolveWinner returns null when plan has no winner and no override
- *   4. computeDisplayedTotal sums overridden + non-overridden winners correctly
- *   5. computeDisplayedTotal handles null winners (no-match items) gracefully
+ *   4. resolveWinner returns plan winner when key deleted (swap-back, Fix 2)
+ *   5. computeDisplayedTotal sums overridden + non-overridden winners correctly
+ *   6. computeDisplayedTotal handles null winners (no-match items) gracefully
+ *   7. computeDisplayedTotal reflects swap-back to original winner (Fix 2)
+ *
+ * Helpers are imported from the real production module (Fix 8) — not mirrored.
  */
 import { describe, it, expect } from 'vitest'
 import type { WinnerResult, Candidate } from '../../types'
-
-// ─── Pure helpers (mirrors PlanResult.tsx logic) ──────────────────────────────
-// Extracted as pure functions here for isolated testing.
-
-const TAX_RATE = 0.0825
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
-}
-
-/**
- * Resolve which Candidate to display for a given spec.
- * Mirrors PlanResult.tsx `resolveWinner` inline logic.
- */
-function resolveWinner(
-  specId: string,
-  winners: WinnerResult[],
-  overrides: Record<string, Candidate | null>
-): Candidate | null {
-  if (specId in overrides) return overrides[specId]
-  return winners.find(w => w.spec.id === specId)?.winner ?? null
-}
-
-/**
- * Compute the displayed total from current overrides + plan winners.
- * Mirrors PlanResult.tsx `displayedTotal` useMemo logic.
- */
-function computeDisplayedTotal(
-  winners: WinnerResult[],
-  overrides: Record<string, Candidate | null>
-): number {
-  let sub = 0
-  for (const wr of winners) {
-    const specId = wr.spec.id
-    const current = specId in overrides ? overrides[specId] : wr.winner
-    sub += current?.item.lineTotal ?? 0
-  }
-  return round2(round2(sub) * (1 + TAX_RATE))
-}
+import { resolveWinner, computeDisplayedTotal, round2, TAX_RATE } from '../../lib/planTotalsView'
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -91,14 +57,14 @@ function makeWinnerResult(specId: string, winner: Candidate | null, eligibleCand
   }
 }
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
+// ─── resolveWinner tests ──────────────────────────────────────────────────────
 
 describe('resolveWinner', () => {
   it('returns the override candidate when an override exists for the spec', () => {
     const kroger = makeCandidate('Kroger', 3.99, 3.99)
     const walmart = makeCandidate('Walmart', 3.49, 3.49)
     const winners: WinnerResult[] = [makeWinnerResult('spec-1', kroger, [walmart])]
-    const overrides: Record<string, Candidate | null> = { 'spec-1': walmart }
+    const overrides: Record<string, Candidate> = { 'spec-1': walmart }
 
     const result = resolveWinner('spec-1', winners, overrides)
     expect(result).toBe(walmart)
@@ -107,7 +73,7 @@ describe('resolveWinner', () => {
   it('returns the plan winner when no override exists', () => {
     const kroger = makeCandidate('Kroger', 3.99, 3.99)
     const winners: WinnerResult[] = [makeWinnerResult('spec-1', kroger)]
-    const overrides: Record<string, Candidate | null> = {}
+    const overrides: Record<string, Candidate> = {}
 
     const result = resolveWinner('spec-1', winners, overrides)
     expect(result).toBe(kroger)
@@ -115,21 +81,26 @@ describe('resolveWinner', () => {
 
   it('returns null when plan winner is null and no override exists', () => {
     const winners: WinnerResult[] = [makeWinnerResult('spec-1', null)]
-    const overrides: Record<string, Candidate | null> = {}
+    const overrides: Record<string, Candidate> = {}
 
     const result = resolveWinner('spec-1', winners, overrides)
     expect(result).toBeNull()
   })
 
-  it('returns null when override is explicitly null (user cleared winner)', () => {
+  it('returns plan winner after key is deleted from overrides (swap-back, Fix 2)', () => {
     const kroger = makeCandidate('Kroger', 3.99, 3.99)
-    const winners: WinnerResult[] = [makeWinnerResult('spec-1', kroger)]
-    const overrides: Record<string, Candidate | null> = { 'spec-1': null }
+    const walmart = makeCandidate('Walmart', 3.49, 3.49)
+    const winners: WinnerResult[] = [makeWinnerResult('spec-1', kroger, [walmart])]
 
+    // Simulate: user swapped to walmart, then swapped back to original (key deleted)
+    const overrides: Record<string, Candidate> = {}
+    // No key for 'spec-1' → falls back to plan winner
     const result = resolveWinner('spec-1', winners, overrides)
-    expect(result).toBeNull()
+    expect(result).toBe(kroger)
   })
 })
+
+// ─── computeDisplayedTotal tests ─────────────────────────────────────────────
 
 describe('computeDisplayedTotal', () => {
   it('sums all plan winners with tax when no overrides', () => {
@@ -140,7 +111,7 @@ describe('computeDisplayedTotal', () => {
       makeWinnerResult('spec-milk', kroger),
       makeWinnerResult('spec-butter', target)
     ]
-    const overrides: Record<string, Candidate | null> = {}
+    const overrides: Record<string, Candidate> = {}
 
     const total = computeDisplayedTotal(winners, overrides)
     // subtotal = 3.99 + 5.49 = 9.48; tax = 9.48 * 0.0825 = 0.7821 → 0.78; total = 10.26
@@ -157,7 +128,7 @@ describe('computeDisplayedTotal', () => {
       makeWinnerResult('spec-butter', target)
     ]
     // User swaps milk to Walmart
-    const overrides: Record<string, Candidate | null> = { 'spec-milk': walmart }
+    const overrides: Record<string, Candidate> = { 'spec-milk': walmart }
 
     const total = computeDisplayedTotal(winners, overrides)
     expect(total).toBe(round2(round2(3.49 + 5.49) * (1 + TAX_RATE)))
@@ -169,9 +140,27 @@ describe('computeDisplayedTotal', () => {
       makeWinnerResult('spec-milk', kroger),
       makeWinnerResult('spec-truffle', null)  // no match anywhere
     ]
-    const overrides: Record<string, Candidate | null> = {}
+    const overrides: Record<string, Candidate> = {}
 
     const total = computeDisplayedTotal(winners, overrides)
     expect(total).toBe(round2(round2(3.99) * (1 + TAX_RATE)))
+  })
+
+  it('reverts to original winner price after key deleted from overrides (swap-back, Fix 2)', () => {
+    const kroger = makeCandidate('Kroger', 4.50, 4.50)
+    const walmart = makeCandidate('Walmart', 3.49, 3.49)
+
+    const winners: WinnerResult[] = [makeWinnerResult('spec-milk', kroger, [walmart])]
+
+    // Overridden → Walmart
+    const withOverride: Record<string, Candidate> = { 'spec-milk': walmart }
+    const totalOverridden = computeDisplayedTotal(winners, withOverride)
+    expect(totalOverridden).toBe(round2(round2(3.49) * (1 + TAX_RATE)))
+
+    // Swap back → key deleted, original Kroger should be used
+    const afterSwapBack: Record<string, Candidate> = {}
+    const totalOriginal = computeDisplayedTotal(winners, afterSwapBack)
+    expect(totalOriginal).toBe(round2(round2(4.50) * (1 + TAX_RATE)))
+    expect(totalOriginal).toBeGreaterThan(totalOverridden)
   })
 })

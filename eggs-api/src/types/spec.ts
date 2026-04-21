@@ -130,6 +130,49 @@ export interface InstacartLineItem {
   line_item_measurements: Array<{ quantity: number; unit: string }>
 }
 
+// ─── ShoppableItemSpecInput — boundary schema for API callers ─────────────────
+//
+// Validates only the fields selectWinner reads. Accepts the frontend mirror
+// shape (ShoppableItemSpecMirror) which omits categoryPath, resolutionTrace,
+// and confidence — these are defaulted so the cast to ShoppableItemSpec[] is safe.
+
+export const ShoppableItemSpecInputSchema = z.object({
+  id: z.string().min(1),
+  sourceText: z.string().optional().default(''),
+  displayName: z.string().min(1),
+  brand: z.string().nullable(),
+  brandLocked: z.boolean(),
+  quantity: z.number().positive().finite(),
+  unit: z.enum(CANONICAL_UNITS),
+  categoryPath: z.array(z.string()).optional().default([]),
+  resolutionTrace: z.array(z.unknown()).optional().default([]),
+  confidence: z.enum(['high', 'medium', 'low']).optional().default('medium'),
+  usdaFdcId: z.number().optional(),
+  offCategoryTag: z.string().optional(),
+  upc: z.string().optional(),
+  attributes: z.record(z.string(), z.string()).optional(),
+}).superRefine((data, ctx) => {
+  const brandIsNull = data.brand === null
+  const brandIsLocked = data.brandLocked
+  if (brandIsNull && brandIsLocked) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['brand'], message: 'brand must not be null when brandLocked is true' })
+  }
+  if (!brandIsNull && !brandIsLocked) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['brandLocked'], message: 'brandLocked must be true when brand is set' })
+  }
+})
+
+export type ShoppableItemSpecInput = z.infer<typeof ShoppableItemSpecInputSchema>
+
+export function validateSpecInput(x: unknown): ShoppableItemSpecInput {
+  const result = ShoppableItemSpecInputSchema.safeParse(x)
+  if (!result.success) {
+    const issues = result.error.issues.map((i) => `[${i.path.join('.')}] ${i.message}`).join('; ')
+    throw new Error(`ShoppableItemSpecInput validation failed: ${issues}`)
+  }
+  return result.data
+}
+
 // ─── validateSpec ─────────────────────────────────────────────────────────────
 
 /**
