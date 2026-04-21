@@ -250,7 +250,14 @@ export async function resolveItem(
   // ── 1. Cache lookup ────────────────────────────────────────────────────────
   const cached = await specCache.lookup(rawText)
   if (cached !== null) {
-    return { kind: 'cached', spec: cached }
+    // Override cached id with the CURRENT caller's id. The cache is keyed by
+    // rawText, so the stored spec carries whatever ingredient id was used at
+    // write time. Subsequent callers for the same text will use different
+    // ingredient ids (they're generated per session); plan.ts merge logic
+    // matches client specs to synthesized specs by id, so this alignment is
+    // load-bearing. Without it, cache hits produce orphan specs that plan.ts
+    // silently replaces with synthesized `unit: 'each'` fallbacks.
+    return { kind: 'cached', spec: { ...cached, id } }
   }
 
   // ── 2. Turn cap check ──────────────────────────────────────────────────────
