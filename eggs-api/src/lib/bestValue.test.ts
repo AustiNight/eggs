@@ -212,6 +212,60 @@ describe('selectWinner — unit mismatch with known countable → converted via 
   })
 })
 
+describe('selectWinner — unit mismatch: spec in count, candidate in mass → mass→count via typicalEachWeightG (Case B)', () => {
+  it('countable fallback: spec in count, candidate in mass — mass→count conversion via typicalEachWeightG', () => {
+    // Spec: user wants 1 dozen eggs (unit = 'dozen', base = 'count')
+    const spec = makeSpec({
+      id: 'eggs',
+      displayName: 'egg',
+      unit: 'dozen',
+      quantity: 1,
+    })
+
+    // Store A sells eggs by the pound (parsed base = 'g')
+    // 1 lb = 453.592 g. At 50g per egg, that's 453.592/50 = 9.0718 eggs.
+    // pricePerBase (per each) = $4.50 / 9.0718 ≈ $0.4960 / each
+    // pricedSize supplies the pre-converted grams so countableFallback receives qty in g.
+    const storeA = makeStore({
+      storeName: 'Store A',
+      distanceMiles: 1.0,
+      items: [
+        makeItem({
+          ingredientId: 'eggs',
+          name: 'eggs by the pound',
+          unit: '1 lb',
+          lineTotal: 4.50,
+          pricedSize: { quantity: 453.592, unit: 'g' },
+        }),
+      ],
+    })
+
+    // Store B sells by the dozen at $5.00
+    const storeB = makeStore({
+      storeName: 'Store B',
+      distanceMiles: 1.0,
+      items: [
+        makeItem({ ingredientId: 'eggs', name: 'one dozen eggs', unit: '1 dozen', lineTotal: 5.00 }),
+      ],
+    })
+
+    const result = selectWinner(spec, [storeA, storeB], noUser)
+
+    // pricePerBase is per-each (count base unit):
+    // Store A: 453.592g / 50g per egg = 9.0718 each → $4.50 / 9.0718 ≈ $0.4960 / each
+    // Store B: 1 dozen = 12 each → $5.00 / 12 ≈ $0.4167 / each
+    // Winner: Store B (lower price per each)
+    expect(result.winner?.storeName).toBe('Store B')
+    expect(result.allCandidates).toHaveLength(2)
+
+    // Verify Store A's candidate converted (not excluded)
+    const storeACandidate = result.allCandidates.find((c) => c.storeName === 'Store A')
+    expect(storeACandidate?.excludeReason).toBeUndefined()
+    expect(storeACandidate?.pricePerBase).toBeGreaterThan(0.49)   // ~$0.4960 / each
+    expect(storeACandidate?.pricePerBase).toBeLessThan(0.51)
+  })
+})
+
 describe('selectWinner — unit mismatch for non-countable item → excluded', () => {
   it('excludes the candidate with unit_mismatch when no countable entry exists', () => {
     // spec.unit = 'g' (mass), store item = each → item is "motor oil" — not a countable
