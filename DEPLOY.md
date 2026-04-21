@@ -392,33 +392,53 @@ Paste the key. Same success message.
 
 ---
 
-## Task 6: Obtain and set `INSTACART_IDP_API_KEY`
+## Task 6: Obtain and set `INSTACART_IDP_API_KEY` (asynchronous — ~1 week SLA)
 
-**Why:** Final review infra item 4. The Instacart Recipe Page button silently hides until this secret is set. No approval gate — Recipe Page is the public tier of the Instacart Developer Platform.
+**Why:** Final review infra item 4. The Instacart Recipe Page button silently hides until this secret is set. The rest of the SHOPPING_V2 rollout (Tasks 7–10) does NOT depend on this task — you can proceed through prod rollout with the button hidden, then add the key when Instacart grants dev access.
+
+**IMPORTANT — this is NOT self-serve:** the Instacart Developer Dashboard gates even development keys behind an access-request process. Per [Instacart's published onboarding SLA](https://docs.instacart.com/developer_platform_api/get_started/overview/): *"Request access & development key"* takes **~1 week**. There is no immediate-issue signup path. Earlier versions of this plan incorrectly stated this was self-serve — that was wrong.
 
 **Files:**
-- None in-repo. Sets a Worker secret on both environments.
+- None in-repo. Sets a Worker secret on both environments once the key is granted.
 
-- [ ] **Step 1: Register for an Instacart Developer account**
+- [ ] **Step 1: Submit an access request via the Instacart Developer Dashboard**
 
-Open https://developers.instacart.com/ in a browser. Sign up. You do NOT need production access — the Recipe Page API works on the free developer tier.
+Open [https://dashboard.instacart.com](https://dashboard.instacart.com) in a browser. Create an account and submit an access request for the Developer Platform.
 
-Expected: an API key visible in your dashboard.
+Positioning to emphasize in the application (proven effective for similar indie applicants per [earlier research](./RESEARCH.md)):
+- E.G.G.S. is **additive, not competitive** — it drives price-shopping purchase intent *into* Instacart for Instacart-served retailers. Every named IDP launch partner (WeightWatchers, NYT Cooking, GE Appliances) shares this pattern.
+- **Live product** at your eggs.app URL with working Kroger + Walmart integrations already shipping.
+- **Kroger Developer Program membership** as credibility prior (already approved on a gated grocery API).
+- Specific use case: embedding the Recipe Page API as a shop-this-list button on the results page of a grocery price-comparison tool.
 
-- [ ] **Step 2: Set the secret on staging**
+Do not inflate MAUs or claim LOIs you don't have. The spec review earlier this session has a full discussion of ethical positioning in `RESEARCH.md`.
+
+Expected: acknowledgement email today; ~1 week wait for dev-key approval.
+
+- [ ] **Step 2: When the dev key arrives — set it on staging**
 
 ```bash
 cd /Users/jonathanaulson/Projects/eggs/eggs-api
 npx wrangler secret put INSTACART_IDP_API_KEY --env staging
 ```
 
-Paste the key. Expected success message.
+Paste the key when prompted. Expected: `✨ Success! Uploaded secret INSTACART_IDP_API_KEY`.
 
 - [ ] **Step 3: Set the secret on prod**
 
 ```bash
 npx wrangler secret put INSTACART_IDP_API_KEY
 ```
+
+Paste the key. Same success message. Next time a plan is generated, the Instacart button will appear automatically — no redeploy needed (Workers hot-load secrets).
+
+- [ ] **Step 4 (optional): If Instacart requires a demo submission**
+
+If the access-request response asks for a demo rather than immediately granting a dev key, that's the second onboarding stage (~19 days, per Instacart SLA). Options:
+- Ship the rest of the rollout without Instacart; submit the demo after prod QA is green.
+- The demo submission can literally be a screen recording of the staging app with a mock key + mock API response — Instacart reviews the integration quality, not the live traffic.
+
+Either way, this task does not block Tasks 7–10.
 
 Paste the key.
 

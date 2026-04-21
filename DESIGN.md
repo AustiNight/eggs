@@ -411,7 +411,7 @@ Top of `PlanResult.tsx`, next to the hero total:
 
 ### Auth
 
-Requires an **API key** from an Instacart Developer account — self-serve at `developers.instacart.com`, no approval needed for the Recipe Page endpoint. Key lives in `INSTACART_IDP_API_KEY` Worker secret.
+Requires an **API key** from the Instacart Developer Dashboard at `dashboard.instacart.com`. **Not self-serve** — per Instacart's published onboarding SLA, even a development key takes ~1 week of access-request review. See `DEPLOY.md` Task 6 for positioning guidance. Until the key lands, the button hides silently (zero user impact). Key lives in the `INSTACART_IDP_API_KEY` Worker secret.
 
 ### Failure handling
 
@@ -658,7 +658,7 @@ Per Jonathan's approval: Claude drafts from the GS1 GPC public browser (https://
 
 **Tasks:**
 
-- [ ] Obtain Instacart IDP API key from self-serve `developers.instacart.com`; add to Cloudflare secrets as `INSTACART_IDP_API_KEY`.
+- [ ] Submit Instacart Developer Dashboard access request at `dashboard.instacart.com` (~1 week SLA, not self-serve — see `DEPLOY.md` Task 6); when granted, add to Cloudflare secrets as `INSTACART_IDP_API_KEY`.
 - [ ] Write failing tests for `IdpClient.createShoppingListPage(specs, title, linkbackUrl)` with a mocked response.
 - [ ] Implement `IdpClient` against `POST https://connect.instacart.com/idp/v1/products/recipe`.
 - [ ] Wire into `plan.ts` — fire-and-forget (Promise.allSettled with the other searches); attach URL if succeeded; silent fail otherwise.
@@ -732,7 +732,7 @@ Legacy `shopping_plans` rows keep their original `plan_data`. Totals are recompu
 12. OFF tag versioning: **version the `ontology_ver` segment of cache keys; bump invalidates.**
 13. AI `pricedSize` fallback: **include with `confidence:'estimated'` marker; user sees it competing with a visual flag.**
 14. Price-per-unit tie-break: **nearest store, then alphabetical.**
-15. IDP Recipe Page API: **rolled into M11, self-serve key, silent-fail on error.**
+15. IDP Recipe Page API: **rolled into M11, access-gated key (~1 week SLA via `dashboard.instacart.com`), silent-fail on error or missing key.**
 
 ## Remaining open questions for DESIGN review
 None load-bearing. Surface any before M1 starts if you see a design choice you disagree with.
@@ -747,4 +747,4 @@ None load-bearing. Surface any before M1 starts if you see a design choice you d
 - [x] Exact file paths everywhere.
 - [x] Testing strategy split per brief.
 - [x] Legacy data integrity preserved (recompute-at-read).
-- [x] Zero-cost architecture respected (KV + Vectorize-later + self-serve IDP key; no paid third-party API except USDA FDC which is free at 1000/hr).
+- [x] Zero-cost architecture respected (KV + Vectorize-later + access-gated-but-free IDP key; no paid third-party API except USDA FDC which is free at 1000/hr).
