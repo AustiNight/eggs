@@ -1,3 +1,13 @@
+// ─── Canonical unit type (shared across unit conversion, store adapters, specs) ─
+
+export type CanonicalUnit =
+  | 'g' | 'kg'                              // mass metric
+  | 'ml' | 'l'                              // volume metric
+  | 'oz' | 'lb'                             // mass US
+  | 'fl_oz' | 'cup' | 'pt' | 'qt' | 'gal' // volume US
+  | 'each' | 'dozen'                        // count
+  | 'bunch' | 'head' | 'clove' | 'pinch'  // produce/culinary
+
 // ─── Hono app env (used everywhere) ──────────────────────────────────────────
 
 export type HonoEnv = {
