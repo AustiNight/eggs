@@ -1,3 +1,6 @@
+// ─── ShoppableItemSpec + validators + Instacart wire format (M2) ─────────────
+export * from './spec.js'
+
 // ─── Canonical unit type (shared across unit conversion, store adapters, specs) ─
 
 export type CanonicalUnit =
