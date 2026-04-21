@@ -251,6 +251,8 @@ Pure function, deterministic, fully unit-testable.
 export interface Candidate {
   storeName: string
   storeBanner: string
+  /** Denormalized from the source StorePlan for convenient tie-breaking. */
+  distanceMiles: number | null
   item: StoreItem
   parsedSize: { quantity: number; unit: CanonicalUnit } | null
   pricePerBase: number | null        // null means excluded

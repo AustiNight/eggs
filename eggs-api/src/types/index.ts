@@ -57,6 +57,7 @@ export interface Env {
  */
 export interface UserProfile {
   avoid_brands: string[]
+  /** Pre-filter stores before calling selectWinner. Consumed by plan.ts (M8+), not by selectWinner. */
   avoid_stores?: string[]
 }
 

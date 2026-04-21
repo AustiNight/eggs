@@ -266,6 +266,70 @@ describe('selectWinner — unit mismatch: spec in count, candidate in mass → m
   })
 })
 
+describe('selectWinner — countable Case A with non-base count unit (dozen) — Fix 1 regression guard', () => {
+  it('correctly converts 1 dozen via toBase before multiplying by typicalEachWeightG', () => {
+    // Spec: user wants X grams of egg (spec.unit = 'g', spec base = 'g')
+    const spec = makeSpec({ id: 'eggs', displayName: 'egg', unit: 'g', quantity: 100 })
+
+    // Store sells eggs by the dozen. typicalEachWeightG = 50 (per countables.ts).
+    // Expected: 1 dozen = 12 eggs * 50 g = 600 g. $3.00 / 600g = $0.005 per gram.
+    // Without the fix: 1 * 50 = 50 g. $3.00 / 50g = $0.06 per gram. (12x inflated.)
+    const store = makeStore({
+      storeName: 'Store A',
+      distanceMiles: 1.0,
+      items: [
+        makeItem({
+          ingredientId: 'eggs',
+          name: 'one dozen eggs',
+          unit: '1 dozen',
+          lineTotal: 3.00,
+          pricedSize: null,    // force parseSize path to exercise toBase conversion
+        }),
+      ],
+    })
+
+    const result = selectWinner(spec, [store], { avoid_brands: [] })
+    expect(result.winner?.storeName).toBe('Store A')
+    expect(result.winner?.pricePerBase).toBeGreaterThan(0.004)   // ~$0.005/g
+    expect(result.winner?.pricePerBase).toBeLessThan(0.006)
+  })
+})
+
+describe('selectWinner — countable Case B with natural lb unit (no pre-conversion) — Fix 1 regression guard', () => {
+  it('correctly converts 1 lb via toBase to grams before dividing by typicalEachWeightG', () => {
+    // Spec: user wants eggs by count (spec.unit = 'dozen', base = 'count')
+    const spec = makeSpec({
+      id: 'eggs',
+      displayName: 'egg',
+      unit: 'dozen',
+      quantity: 1,
+    })
+
+    // Store sells eggs by the pound — natural unit, no pre-conversion in pricedSize.
+    // 1 lb = 453.592 g. At 50g per egg → 453.592/50 = 9.0718 eggs.
+    // pricePerBase (per each) = $4.50 / 9.0718 ≈ $0.4960 / each
+    // Without the fix: 1 / 50 = 0.02 each → $4.50 / 0.02 = $225 / each. (~453x inflated.)
+    const store = makeStore({
+      storeName: 'Store A',
+      distanceMiles: 1.0,
+      items: [
+        makeItem({
+          ingredientId: 'eggs',
+          name: 'eggs by the pound',
+          unit: '1 lb',
+          lineTotal: 4.50,
+          pricedSize: null,    // force parseSize path to exercise toBase conversion
+        }),
+      ],
+    })
+
+    const result = selectWinner(spec, [store], { avoid_brands: [] })
+    expect(result.winner?.storeName).toBe('Store A')
+    expect(result.winner?.pricePerBase).toBeGreaterThan(0.49)   // ~$0.4960 / each
+    expect(result.winner?.pricePerBase).toBeLessThan(0.51)
+  })
+})
+
 describe('selectWinner — unit mismatch for non-countable item → excluded', () => {
   it('excludes the candidate with unit_mismatch when no countable entry exists', () => {
     // spec.unit = 'g' (mass), store item = each → item is "motor oil" — not a countable

@@ -11,9 +11,13 @@
 import type { ShoppableItemSpec } from '../types/spec.js'
 import type { StoreItem, StorePlan, UserProfile } from '../types/index.js'
 import type { CanonicalUnit } from '../types/index.js'
-import { parseSize, pricePerBase as computePricePerBase, BASE_DIMENSION } from './units.js'
+import { parseSize, pricePerBase as computePricePerBase, BASE_DIMENSION, toBase } from './units.js'
 import { matchesBrand, normalizeBrand } from './brands.js'
 import { COUNTABLES } from '../data/countables.js'
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const PPB_PRECISION = 10_000   // 4 decimal places for price-per-base comparisons
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -38,6 +42,10 @@ export interface WinnerResult {
 // ─── Module-internal helpers ──────────────────────────────────────────────────
 
 /**
+ * Lighter normalizer than `normalizeBrand`: lowercases + collapses whitespace.
+ * Used only for COUNTABLES canonicalName / synonym matching where punctuation
+ * is not expected in keys.
+ *
  * Normalize a label for countable lookup: lowercase, trim, collapse whitespace.
  */
 function normalizeLabel(s: string): string {
@@ -86,15 +94,17 @@ function countableFallback(
   if (!entry) return null
 
   if (specBase === 'g' && parsedBase === 'count') {
-    // each → grams
-    const totalGrams = parsed.quantity * entry.typicalEachWeightG
+    // each → grams: normalize parsed quantity to its base count first (e.g. 1 dozen → 12 each)
+    const { qty: parsedEachCount } = toBase(parsed.quantity, parsed.unit)
+    const totalGrams = parsedEachCount * entry.typicalEachWeightG
     if (totalGrams === 0) return null
     return lineTotal / totalGrams
   }
 
   // specBase === 'count' && parsedBase === 'g'
-  // grams → each
-  const eachCount = parsed.quantity / entry.typicalEachWeightG
+  // grams → each: normalize parsed quantity to its base grams first (e.g. 1 lb → 453.592 g)
+  const { qty: parsedGrams } = toBase(parsed.quantity, parsed.unit)
+  const eachCount = parsedGrams / entry.typicalEachWeightG
   if (eachCount === 0) return null
   return lineTotal / eachCount
 }
@@ -180,8 +190,8 @@ function itemIsAvoided(item: StoreItem, normalizedAvoidBrands: string[]): boolea
  */
 function tieBreakSort(candidates: Candidate[]): Candidate[] {
   return [...candidates].sort((a, b) => {
-    const aPpb = Math.round(a.pricePerBase! * 10000) / 10000
-    const bPpb = Math.round(b.pricePerBase! * 10000) / 10000
+    const aPpb = Math.round(a.pricePerBase! * PPB_PRECISION) / PPB_PRECISION
+    const bPpb = Math.round(b.pricePerBase! * PPB_PRECISION) / PPB_PRECISION
     if (aPpb !== bPpb) return aPpb - bPpb
 
     const aDist = a.distanceMiles ?? Infinity
@@ -227,7 +237,10 @@ export function selectWinner(
     // Brand-locked: filter to only candidates whose name matches spec.brand
     const brandMatched = pricedCandidates.filter((c) => itemMatchesBrand(c.item, spec.brand!))
 
-    // Mark non-matching priced candidates as brand_mismatch
+    // Mark non-matching priced candidates as brand_mismatch.
+    // Note: mutates candidates in-place. allCandidates and pricedCandidates share
+    // the same object references, so exclusion reasons propagate to both — which is
+    // what the UI per-store panels need.
     for (const c of allCandidates) {
       if (c.pricePerBase !== null && !brandMatched.includes(c)) {
         c.excludeReason = 'brand_mismatch'
