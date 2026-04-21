@@ -122,6 +122,11 @@ export function validateAndNormalizeAiItems(rawItems: unknown[]): StoreItem[] {
   const validUnits = new Set<string>(CANONICAL_UNITS)
 
   return rawItems.map((raw) => {
+    if (raw === null || typeof raw !== 'object') {
+      console.warn('[ai-adapter] skipping non-object item in AI response')
+      return null
+    }
+
     const item = raw as StoreItem & { pricedSize?: { quantity: number; unit: string } | null }
 
     // Validate pricedSize.unit against CANONICAL_UNITS; null out on invalid unit.
@@ -143,7 +148,7 @@ export function validateAndNormalizeAiItems(rawItems: unknown[]): StoreItem[] {
     }
 
     return { ...item, pricedSize, confidence } as StoreItem
-  })
+  }).filter((item): item is StoreItem => item !== null)
 }
 
 // ── AI: search all non-API stores for ALL ingredients (cache-first) ──────────
@@ -674,7 +679,10 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
       // Check cache first — cache wins over AI result (24h TTL means it's recent)
       const cacheHit = cacheHits.get(`${bannerKey}::${item.ingredientId}`)
       if (cacheHit) {
-        Object.assign(item, cacheHit.item, { ingredientId: item.ingredientId })
+        Object.assign(item, cacheHit.item, {
+          ingredientId: item.ingredientId,
+          pricedSize: cacheHit.item.pricedSize ?? null,
+        })
         continue
       }
 

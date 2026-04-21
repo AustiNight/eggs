@@ -191,9 +191,16 @@ export interface StoreItem {
   /** True when this store doesn't carry the item — included to keep schema uniform across stores */
   notAvailable?: boolean
   /**
-   * The actual package size the AI priced (e.g. a 2.5 lb family pack, not the user's "2 lb"
-   * input). Non-null for confidence 'real' and 'estimated_with_source'; may be null for
-   * confidence 'estimated' (pure guess with no source). Added in M5.
+   * The actual package size the AI adapter priced.
+   *
+   * For AI-sourced items (priceSource='ai_estimated'): non-null when confidence
+   * is 'real' or 'estimated_with_source'; null when confidence is 'estimated'
+   * (pure guess). The `validateAndNormalizeAiItems` helper enforces this at
+   * parse time, downgrading confidence when pricedSize is missing.
+   *
+   * For direct-API sources (Kroger, Walmart): always null today. May be
+   * populated in a future milestone that parses the store-returned `size`
+   * string and maps it to canonical units.
    */
   pricedSize: { quantity: number; unit: CanonicalUnit } | null
 }

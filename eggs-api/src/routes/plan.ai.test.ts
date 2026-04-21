@@ -30,6 +30,7 @@ function makeRawItem(overrides: Record<string, unknown> = {}): Record<string, un
     unitPrice: 4.99,
     lineTotal: 9.98,
     confidence: 'real',
+    shopUrl: 'https://example.com/product',
     proofUrl: 'https://www.wholefoods.com/products/chicken-breast',
     isLoyaltyPrice: false,
     nonMemberPrice: null,
@@ -162,6 +163,28 @@ describe('validateAndNormalizeAiItems — scenario 5: invalid pricedSize unit �
     expect(item.confidence).toBe('estimated')
     expect(warnSpy).toHaveBeenCalledOnce()
     expect(warnSpy.mock.calls[0][0]).toMatch(/unknown pricedSize\.unit.*tbsp/)
+  })
+})
+
+// ── Scenario 6 ────────────────────────────────────────────────────────────────
+// Non-object elements (string, null, number) are skipped with a warning and
+// filtered out; valid object items are returned normally.
+
+describe('validateAndNormalizeAiItems — scenario 6: non-object items are skipped', () => {
+  it('filters out non-object elements and logs a warning for each', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const raw = [makeRawItem(), 'not an object', null, 42]
+    const result = validateAndNormalizeAiItems(raw)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].name).toBe('chicken breast')
+
+    // One warning per non-object element (string, null, number = 3).
+    expect(warnSpy).toHaveBeenCalledTimes(3)
+    expect(warnSpy.mock.calls[0][0]).toMatch(/skipping non-object item/)
+    expect(warnSpy.mock.calls[1][0]).toMatch(/skipping non-object item/)
+    expect(warnSpy.mock.calls[2][0]).toMatch(/skipping non-object item/)
   })
 })
 
