@@ -5,13 +5,17 @@
  * Preserves existing behavior exactly.
  */
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ShoppingCart, Car, DollarSign, ArrowRight, Globe, Activity, Tag, ExternalLink, FileText, AlertCircle } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import type { ShoppingPlan, StorePlan, StoreItem } from '../types'
+import { updateEvent } from '../lib/api'
 
 interface LegacyPlanViewProps {
   plan: ShoppingPlan
   onReset: () => void
+  eventId?: string
+  getToken?: () => Promise<string | null>
 }
 
 const COLORS = ['#fbbf24', '#f97316', '#34d399', '#60a5fa', '#a78bfa']
@@ -98,7 +102,8 @@ function ItemRow({ item }: { item: StoreItem }) {
   )
 }
 
-const LegacyPlanView: React.FC<LegacyPlanViewProps> = ({ plan, onReset }) => {
+const LegacyPlanView: React.FC<LegacyPlanViewProps> = ({ plan, onReset, eventId, getToken }) => {
+  const navigate = useNavigate()
   const data = plan.stores.map(s => ({ name: s.storeName, value: s.subtotal }))
   const handleShopAll = (store: StorePlan) => {
     store.items.forEach(item => {
@@ -291,6 +296,20 @@ const LegacyPlanView: React.FC<LegacyPlanViewProps> = ({ plan, onReset }) => {
               )}
             </ul>
           </div>
+          {eventId && getToken && (
+            <button
+              onClick={async () => {
+                const token = await getToken()
+                if (!token) return
+                await updateEvent(token, eventId, { status: 'reconcile_needed' })
+                navigate(`/events/${eventId}`)
+              }}
+              className="w-full py-3 rounded-xl font-semibold text-sm"
+              style={{ backgroundColor: '#fbbf24', color: '#0f172a', boxShadow: '0 0 18px rgba(251,191,36,0.45)' }}
+            >
+              Mark Shopping Complete →
+            </button>
+          )}
           <button onClick={onReset} className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold transition-colors border border-slate-600">
             Start New List
           </button>

@@ -9,8 +9,10 @@
  * The displayed total is computed from overrides + plan.winners, not from plan.summary.
  */
 import React, { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Globe, Activity, DollarSign, ArrowRight } from 'lucide-react'
 import type { ShoppingPlan, WinnerResult, Candidate } from '../types'
+import { updateEvent } from '../lib/api'
 import LegacyPlanView from './LegacyPlanView'
 import BestBasketList from './BestBasketList'
 import PerStorePanels from './PerStorePanels'
@@ -18,6 +20,9 @@ import PerStorePanels from './PerStorePanels'
 interface PlanResultProps {
   plan: ShoppingPlan
   onReset: () => void
+  /** Present when rendered from an event flow — enables "Mark Shopping Complete" button. */
+  eventId?: string
+  getToken?: () => Promise<string | null>
 }
 
 const TAX_RATE = 0.0825
@@ -26,15 +31,45 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
+// ─── Mark Shopping Complete button ────────────────────────────────────────────
+
+interface MarkShoppingCompleteButtonProps {
+  eventId?: string
+  getToken?: () => Promise<string | null>
+}
+
+function MarkShoppingCompleteButton({ eventId, getToken }: MarkShoppingCompleteButtonProps) {
+  const navigate = useNavigate()
+
+  if (!eventId || !getToken) return null
+
+  return (
+    <button
+      onClick={async () => {
+        const token = await getToken()
+        if (!token) return
+        await updateEvent(token, eventId, { status: 'reconcile_needed' })
+        navigate(`/events/${eventId}`)
+      }}
+      className="w-full py-3 rounded-xl font-semibold text-sm"
+      style={{ backgroundColor: '#fbbf24', color: '#0f172a', boxShadow: '0 0 18px rgba(251,191,36,0.45)' }}
+    >
+      Mark Shopping Complete →
+    </button>
+  )
+}
+
 // ─── Best-basket view ─────────────────────────────────────────────────────────
 
 interface BestBasketViewProps {
   plan: ShoppingPlan
   winners: WinnerResult[]
   onReset: () => void
+  eventId?: string
+  getToken?: () => Promise<string | null>
 }
 
-function BestBasketView({ plan, winners, onReset }: BestBasketViewProps) {
+function BestBasketView({ plan, winners, onReset, eventId, getToken }: BestBasketViewProps) {
   // winnerOverrides: spec.id → user-selected Candidate (overrides the server winner)
   const [winnerOverrides, setWinnerOverrides] = useState<Record<string, Candidate | null>>({})
 
@@ -173,6 +208,8 @@ function BestBasketView({ plan, winners, onReset }: BestBasketViewProps) {
       {/* Per-store panels (collapsible) */}
       <PerStorePanels stores={plan.stores} />
 
+      <MarkShoppingCompleteButton eventId={eventId} getToken={getToken} />
+
       <button
         onClick={onReset}
         className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold transition-colors border border-slate-600"
@@ -185,15 +222,15 @@ function BestBasketView({ plan, winners, onReset }: BestBasketViewProps) {
 
 // ─── Top-level conditional ────────────────────────────────────────────────────
 
-const PlanResult: React.FC<PlanResultProps> = ({ plan, onReset }) => {
+const PlanResult: React.FC<PlanResultProps> = ({ plan, onReset, eventId, getToken }) => {
   const winners = plan.winners
 
   if (winners && winners.length > 0) {
-    return <BestBasketView plan={plan} winners={winners} onReset={onReset} />
+    return <BestBasketView plan={plan} winners={winners} onReset={onReset} eventId={eventId} getToken={getToken} />
   }
 
   // Legacy path — SHOPPING_V2 off or old plan without winners
-  return <LegacyPlanView plan={plan} onReset={onReset} />
+  return <LegacyPlanView plan={plan} onReset={onReset} eventId={eventId} getToken={getToken} />
 }
 
 export default PlanResult
