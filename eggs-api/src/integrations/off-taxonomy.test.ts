@@ -13,11 +13,11 @@ function makeMockKV(): KVLike & { _store: Map<string, string> } {
   const store = new Map<string, string>()
   return {
     _store: store,
-    async get(key: string, options?: { type?: 'json' | 'text' }): Promise<unknown> {
+    // Returns the raw stored string, or null when the key is absent.
+    // Matches the KVLike contract: null = miss, any string = hit (caller parses).
+    async get(key: string): Promise<string | null> {
       const raw = store.get(key)
-      if (raw === undefined) return null
-      if (options?.type === 'json') return JSON.parse(raw)
-      return raw
+      return raw !== undefined ? raw : null
     },
     async put(key: string, value: string): Promise<void> {
       store.set(key, value)

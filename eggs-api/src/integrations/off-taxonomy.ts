@@ -75,6 +75,7 @@ interface OffProductRaw {
 
 const OFF_BASE = 'https://world.openfoodfacts.org/api/v2'
 const TTL_SECONDS = 7 * 24 * 60 * 60  // 7 days
+const DEFAULT_PAGE_SIZE = 25
 
 // ─── Mapping helper ───────────────────────────────────────────────────────────
 
@@ -111,6 +112,9 @@ export class OffTaxonomyClient {
     this.taxonomyCached = cacheKV({
       ns: opts.cacheNs,
       ttlSeconds: TTL_SECONDS,
+      // TODO: insert an `ontology_ver` segment into this cache key per DESIGN.md note 12
+      // so bumping ontology version invalidates downstream caches without a manual purge.
+      // Deferred to M6 or whenever the first ontology version bump is planned.
       keyFn: (tag: string, lang: string) =>
         `off:v1:taxonomy:categories:${tag}:${lang}`,
       loader: (tag: string, lang: string) =>
@@ -163,7 +167,7 @@ export class OffTaxonomyClient {
     opts?: { country?: string; pageSize?: number }
   ): Promise<OffProduct[]> {
     const country = opts?.country ?? 'united-states'
-    const pageSize = opts?.pageSize ?? 25
+    const pageSize = opts?.pageSize ?? DEFAULT_PAGE_SIZE
     return this.searchCached(term, country, pageSize)
   }
 

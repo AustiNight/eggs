@@ -3,7 +3,7 @@
 // Uses an in-memory KVLike mock to avoid any Cloudflare / Miniflare dependencies.
 // Tests the four required behaviors plus a happy-path round trip.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { cacheKV } from './cacheKV.js'
 import type { KVLike } from './cacheKV.js'
 
@@ -22,14 +22,15 @@ function makeMockKV(): KVLike & { _store: Map<string, MockEntry>; _now: () => nu
     _store: store,
     _now: () => nowMs,
 
-    async get(key: string, options?: { type?: 'json' | 'text' }): Promise<unknown> {
+    // Returns the raw stored string, or null when the key is absent / expired.
+    // Matches the KVLike contract: null = miss, any string = hit (caller parses).
+    async get(key: string): Promise<string | null> {
       const entry = store.get(key)
       if (!entry) return null
       if (entry.expiresAt !== Infinity && nowMs >= entry.expiresAt) {
         store.delete(key)
         return null
       }
-      if (options?.type === 'json') return JSON.parse(entry.value)
       return entry.value
     },
 
@@ -217,6 +218,30 @@ describe('cacheKV — loader failure does not poison cache', () => {
     const result = await fn('x')
     expect(result).toEqual({ attempt: 2 })
     expect(loader).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('cacheKV — null loader result is cached', () => {
+  it('caches a null result so the second call is a hit without invoking loader', async () => {
+    const ns = makeMockKV()
+    const loader = vi.fn().mockResolvedValue(null)
+
+    const fn = cacheKV({
+      ns,
+      ttlSeconds: 3600,
+      keyFn: (id: number) => `fdc:v1:food:${id}`,
+      loader,
+    })
+
+    // First call — miss → loader returns null
+    const first = await fn(9999999)
+    expect(first).toBeNull()
+    expect(loader).toHaveBeenCalledOnce()
+
+    // Second call — null was stored; should be a cache hit, loader NOT called again
+    const second = await fn(9999999)
+    expect(second).toBeNull()
+    expect(loader).toHaveBeenCalledOnce()
   })
 })
 

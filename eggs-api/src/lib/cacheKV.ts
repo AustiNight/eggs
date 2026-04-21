@@ -7,17 +7,25 @@
 //
 // Behavior:
 //   1. Compute key = keyFn(...args).
-//   2. ns.get(key, { type: 'json' }) — non-null → return cached value.
-//   3. Miss → call loader(...args).
+//   2. ns.get(key) — returns a raw string or null (null = key absent / expired).
+//      Any non-null string is a cache hit; we JSON.parse it ourselves so that
+//      stored "null" (loader returned null, e.g. FDC 404) is correctly
+//      distinguished from a missing key and does not re-hit the network.
+//   3. Miss (raw === null) → call loader(...args).
 //   4. Write result: ns.put(key, JSON.stringify(result), { expirationTtl }).
 //   5. If loader throws → do NOT write to cache; propagate the error.
 
 // ─── Public interface ─────────────────────────────────────────────────────────
 
 /** Minimum interface any KV namespace must satisfy. Cloudflare's KVNamespace
- *  implements this, as does the in-memory mock used in tests. */
+ *  implements this, as does the in-memory mock used in tests.
+ *
+ *  Note: get(key) without options returns Promise<string | null>. This is the
+ *  same contract as Cloudflare's real KVNamespace — raw-string mode is used so
+ *  that stored "null" (a loader that returned null, e.g. FDC 404) is a cache
+ *  hit, not a miss. */
 export interface KVLike {
-  get(key: string, options?: { type?: 'json' | 'text' }): Promise<unknown>
+  get(key: string): Promise<string | null>
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>
 }
 
@@ -58,9 +66,12 @@ export function cacheKV<Args extends readonly unknown[], T>(
     const key = keyFn(...args)
 
     // ── Cache read ────────────────────────────────────────────────────────────
-    const cached = await ns.get(key, { type: 'json' })
-    if (cached !== null && cached !== undefined) {
-      return cached as T
+    // Use raw-string get so that stored "null" (loader returned null, e.g. FDC
+    // 404) is correctly identified as a cache hit and not a missing key.
+    // ns.get(key) returns null only when the key doesn't exist or has expired.
+    const cached = await ns.get(key)
+    if (cached !== null) {
+      return JSON.parse(cached) as T
     }
 
     // ── Cache miss — call loader ───────────────────────────────────────────────

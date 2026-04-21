@@ -39,6 +39,8 @@ export interface UsdaFdcClientOptions {
   cacheNs: KVLike
   /** Optional fetch override for testing; defaults to global `fetch`. */
   fetchImpl?: typeof fetch
+  /** Override the 429 retry delay in ms (defaults to RETRY_DELAY_MS = 1000). Set to 0 in tests. */
+  sleepMs?: number
 }
 
 // ─── Internal FDC API response shapes ────────────────────────────────────────
@@ -64,6 +66,8 @@ interface FdcFoodItem {
 
 const FDC_BASE = 'https://api.nal.usda.gov/fdc/v1'
 const TTL_SECONDS = 7 * 24 * 60 * 60  // 7 days
+const RETRY_DELAY_MS = 1_000
+const DEFAULT_PAGE_SIZE = 25
 
 // ─── Mapping helper ───────────────────────────────────────────────────────────
 
@@ -87,12 +91,14 @@ function mapFoodItem(item: FdcFoodItem): FdcBrandedHit {
 export class UsdaFdcClient {
   private readonly apiKey: string
   private readonly fetchImpl: typeof fetch
+  private readonly sleepMs: number
   private readonly searchCached: (name: string, pageSize: number) => Promise<FdcBrandedHit[]>
   private readonly foodCached: (fdcId: number) => Promise<FdcBrandedHit | null>
 
   constructor(opts: UsdaFdcClientOptions) {
     this.apiKey = opts.apiKey
     this.fetchImpl = opts.fetchImpl ?? fetch
+    this.sleepMs = opts.sleepMs ?? RETRY_DELAY_MS
 
     // ── Cached search ─────────────────────────────────────────────────────────
     this.searchCached = cacheKV({
@@ -123,7 +129,7 @@ export class UsdaFdcClient {
     name: string,
     opts?: { pageSize?: number }
   ): Promise<FdcBrandedHit[]> {
-    const pageSize = opts?.pageSize ?? 25
+    const pageSize = opts?.pageSize ?? DEFAULT_PAGE_SIZE
     return this.searchCached(name, pageSize)
   }
 
@@ -148,6 +154,9 @@ export class UsdaFdcClient {
     const url = `${FDC_BASE}/foods/search?${params}`
 
     const res = await this._fetchWithRetry(url)
+    if (!res.ok) {
+      throw new Error(`FDC search failed for query "${name}" with status ${res.status}`)
+    }
     const data = (await res.json()) as FdcSearchResponse
     return (data.foods ?? []).map(mapFoodItem)
   }
@@ -173,8 +182,8 @@ export class UsdaFdcClient {
     let res = await this.fetchImpl(url)
 
     if (res.status === 429) {
-      // Wait 1 second, then retry once
-      await new Promise<void>((resolve) => setTimeout(resolve, 1000))
+      // Wait sleepMs, then retry once (injectable for testing — defaults to RETRY_DELAY_MS = 1000)
+      await new Promise<void>((resolve) => setTimeout(resolve, this.sleepMs))
       res = await this.fetchImpl(url)
     }
 

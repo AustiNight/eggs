@@ -3,7 +3,7 @@
 // All tests use a mocked `fetchImpl` — no real network calls.
 // Mock responses match the FDC v1 API JSON shape.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { UsdaFdcClient } from './usda-fdc.js'
 import type { KVLike } from '../lib/cacheKV.js'
 
@@ -13,11 +13,11 @@ function makeMockKV(): KVLike & { _store: Map<string, string> } {
   const store = new Map<string, string>()
   return {
     _store: store,
-    async get(key: string, options?: { type?: 'json' | 'text' }): Promise<unknown> {
+    // Returns the raw stored string, or null when the key is absent.
+    // Matches the KVLike contract: null = miss, any string = hit (caller parses).
+    async get(key: string): Promise<string | null> {
       const raw = store.get(key)
-      if (raw === undefined) return null
-      if (options?.type === 'json') return JSON.parse(raw)
-      return raw
+      return raw !== undefined ? raw : null
     },
     async put(key: string, value: string): Promise<void> {
       store.set(key, value)
@@ -249,6 +249,17 @@ describe('UsdaFdcClient.getByFdcId', () => {
   })
 })
 
+// ─── Non-2xx error handling ───────────────────────────────────────────────────
+
+describe('UsdaFdcClient — non-2xx error handling', () => {
+  it('throws with status code in message when FDC search returns 500', async () => {
+    const fetchImpl = makeFetch({ error: 'Internal Server Error' }, 500)
+    const client = new UsdaFdcClient({ apiKey: 'k', cacheNs: makeMockKV(), fetchImpl, sleepMs: 0 })
+
+    await expect(client.searchBrandedByName('milk')).rejects.toThrow(/status 500/)
+  })
+})
+
 // ─── 429 retry behavior ───────────────────────────────────────────────────────
 
 describe('UsdaFdcClient — 429 rate-limit handling', () => {
@@ -266,7 +277,7 @@ describe('UsdaFdcClient — 429 rate-limit handling', () => {
       }
     }) as unknown as typeof fetch
 
-    const client = new UsdaFdcClient({ apiKey: 'k', cacheNs: makeMockKV(), fetchImpl })
+    const client = new UsdaFdcClient({ apiKey: 'k', cacheNs: makeMockKV(), fetchImpl, sleepMs: 0 })
     const hits = await client.searchBrandedByName('milk')
 
     expect(hits).toHaveLength(2)
@@ -278,7 +289,7 @@ describe('UsdaFdcClient — 429 rate-limit handling', () => {
       ok: false, status: 429, json: async () => ({}), text: async () => '{}',
     }) as unknown as typeof fetch
 
-    const client = new UsdaFdcClient({ apiKey: 'k', cacheNs: makeMockKV(), fetchImpl })
+    const client = new UsdaFdcClient({ apiKey: 'k', cacheNs: makeMockKV(), fetchImpl, sleepMs: 0 })
     await expect(client.searchBrandedByName('milk')).rejects.toThrow(/429|rate.?limit/i)
   })
 
@@ -289,7 +300,7 @@ describe('UsdaFdcClient — 429 rate-limit handling', () => {
       return { ok: false, status: 429, json: async () => ({}), text: async () => '{}' }
     }) as unknown as typeof fetch
 
-    const client = new UsdaFdcClient({ apiKey: 'k', cacheNs: makeMockKV(), fetchImpl })
+    const client = new UsdaFdcClient({ apiKey: 'k', cacheNs: makeMockKV(), fetchImpl, sleepMs: 0 })
     await expect(client.searchBrandedByName('milk')).rejects.toThrow()
     expect(calls).toBe(2)
   })
