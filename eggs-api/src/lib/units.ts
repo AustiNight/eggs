@@ -40,6 +40,16 @@ const TO_BASE: Record<CanonicalUnit, { base: 'g' | 'ml' | 'count'; factor: numbe
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
+ * Maps every CanonicalUnit to its base dimension ('g', 'ml', or 'count').
+ * Derived from TO_BASE — single source of truth, no duplication across adapters.
+ */
+export const BASE_DIMENSION: Record<CanonicalUnit, 'g' | 'ml' | 'count'> = Object.fromEntries(
+  (Object.entries(TO_BASE) as Array<[CanonicalUnit, typeof TO_BASE[CanonicalUnit]]>).map(
+    ([u, { base }]) => [u, base]
+  )
+) as Record<CanonicalUnit, 'g' | 'ml' | 'count'>
+
+/**
  * Convert `qty` from one CanonicalUnit to another.
  * Returns null when the units have different base dimensions (cross-base).
  */

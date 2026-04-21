@@ -1,6 +1,20 @@
 import { describe, it, expect } from 'vitest'
-import { convert, toBase, pricePerBase, parseSize } from './units.js'
+import { convert, toBase, pricePerBase, parseSize, BASE_DIMENSION } from './units.js'
 import type { CanonicalUnit } from '../types/index.js'
+
+// ─── BASE_DIMENSION ───────────────────────────────────────────────────────────
+
+describe('BASE_DIMENSION', () => {
+  it('oz maps to "g" (mass)', () => {
+    expect(BASE_DIMENSION.oz).toBe('g')
+  })
+  it('fl_oz maps to "ml" (volume)', () => {
+    expect(BASE_DIMENSION.fl_oz).toBe('ml')
+  })
+  it('each maps to "count"', () => {
+    expect(BASE_DIMENSION.each).toBe('count')
+  })
+})
 
 // ─── convert() ────────────────────────────────────────────────────────────────
 

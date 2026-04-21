@@ -1,18 +1,10 @@
-import type { KrogerProduct, KrogerLocation, CanonicalUnit } from '../types/index.js'
+import type { KrogerProduct, KrogerLocation } from '../types/index.js'
 import type { StoreAdapter, StoreSearchInput, StoreSearchResult } from './StoreAdapter.js'
-import { normalizeBrand } from '../lib/brands.js'
-import { parseSize } from '../lib/units.js'
+import { matchesBrand } from '../lib/brands.js'
+import { parseSize, BASE_DIMENSION } from '../lib/units.js'
 import { stripUnitNoise } from '../lib/queryStrip.js'
 
 const KROGER_BASE = 'https://api.kroger.com/v1'
-
-// Internal TO_BASE lookup needed for unit-preference comparisons.
-// We only need the base dimension, not the factor.
-const BASE_DIMENSION: Record<string, 'g' | 'ml' | 'count'> = {
-  g: 'g', kg: 'g', oz: 'g', lb: 'g',
-  ml: 'ml', l: 'ml', fl_oz: 'ml', cup: 'ml', pt: 'ml', qt: 'ml', gal: 'ml',
-  each: 'count', dozen: 'count', bunch: 'count', head: 'count', clove: 'count', pinch: 'count',
-}
 
 export class KrogerClient implements StoreAdapter {
   private accessToken: string | null = null
@@ -146,15 +138,14 @@ export class KrogerClient implements StoreAdapter {
     // ── Brand filter ─────────────────────────────────────────────────────────
     let eligible = candidates
     if (brand) {
-      const normalizedInputBrand = normalizeBrand(brand)
-      const brandMatches = candidates.filter(
-        c => normalizeBrand(c.product.brand) === normalizedInputBrand
+      const brandFiltered = candidates.filter(
+        c => matchesBrand({ brand: c.product.brand, name: c.product.description }, brand)
       )
-      if (!brandMatches.length) {
+      if (!brandFiltered.length) {
         console.log(`[kroger] brand-lock "${brand}" — no matching products for "${name}"`)
         return null
       }
-      eligible = brandMatches
+      eligible = brandFiltered
     }
 
     // ── Unit preference ───────────────────────────────────────────────────────
@@ -180,7 +171,7 @@ export class KrogerClient implements StoreAdapter {
     const priced = best.product
     const item = priced.items![0]!
 
-    if (best.query !== name && best.query !== input.name) {
+    if (best.query !== name) {
       console.log(`[kroger] "${name}" → stripped "${best.query}" matched "${priced.description}" at ${best.locationId}`)
     } else if (best.locationId !== locations[0]) {
       console.log(`[kroger] "${name}" fell back to location ${best.locationId}`)
@@ -207,19 +198,8 @@ export class KrogerClient implements StoreAdapter {
   async getPriceForIngredient(
     ingredientName: string,
     locationIds: string | string[]
-  ): Promise<{
-    sku: string
-    name: string
-    brand: string
-    regularPrice: number
-    promoPrice: number | null
-    productUrl: string
-    size: string
-    matchedLocationId: string
-  } | null> {
-    return this.search({
-      name: ingredientName,
-      locationIds: Array.isArray(locationIds) ? locationIds : [locationIds]
-    })
+  ): Promise<StoreSearchResult | null> {
+    const ids = Array.isArray(locationIds) ? locationIds : [locationIds]
+    return this.search({ name: ingredientName, locationIds: ids })
   }
 }

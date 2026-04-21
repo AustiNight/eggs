@@ -14,16 +14,9 @@
 
 import type { WalmartLocation, WalmartProduct } from '../types/index.js'
 import type { StoreAdapter, StoreSearchInput, StoreSearchResult } from './StoreAdapter.js'
-import { normalizeBrand } from '../lib/brands.js'
-import { parseSize } from '../lib/units.js'
+import { matchesBrand } from '../lib/brands.js'
+import { parseSize, BASE_DIMENSION } from '../lib/units.js'
 import { stripUnitNoise } from '../lib/queryStrip.js'
-
-// Internal base-dimension table for unit-preference comparisons.
-const BASE_DIMENSION: Record<string, 'g' | 'ml' | 'count'> = {
-  g: 'g', kg: 'g', oz: 'g', lb: 'g',
-  ml: 'ml', l: 'ml', fl_oz: 'ml', cup: 'ml', pt: 'ml', qt: 'ml', gal: 'ml',
-  each: 'count', dozen: 'count', bunch: 'count', head: 'count', clove: 'count', pinch: 'count',
-}
 
 const DEFAULT_WALMART_BASE = 'https://developer.api.walmart.com/api-proxy/service/affil/product/v2'
 
@@ -212,15 +205,14 @@ export class WalmartClient implements StoreAdapter {
     // ── Brand filter ──────────────────────────────────────────────────────────
     let eligible = candidates
     if (brand) {
-      const normalizedInputBrand = normalizeBrand(brand)
-      const brandMatches = candidates.filter(
-        item => normalizeBrand(item.brandName ?? '') === normalizedInputBrand
+      const brandFiltered = candidates.filter(
+        item => matchesBrand({ brand: item.brandName ?? '', name: item.name ?? '' }, brand)
       )
-      if (!brandMatches.length) {
+      if (!brandFiltered.length) {
         console.log(`[walmart] brand-lock "${brand}" — no matching products for "${name}"`)
         return null
       }
-      eligible = brandMatches
+      eligible = brandFiltered
     }
 
     // ── Unit preference ───────────────────────────────────────────────────────
@@ -265,15 +257,7 @@ export class WalmartClient implements StoreAdapter {
   async getPriceForIngredient(
     ingredientName: string,
     zipCode?: string
-  ): Promise<{
-    sku: string
-    name: string
-    brand: string
-    regularPrice: number
-    promoPrice: number | null
-    productUrl: string
-    size: string
-  } | null> {
+  ): Promise<StoreSearchResult | null> {
     return this.search({ name: ingredientName, zipCode })
   }
 }

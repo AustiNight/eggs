@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeBrand } from './brands.js'
+import { normalizeBrand, matchesBrand } from './brands.js'
 
 // ─── Basic normalization ───────────────────────────────────────────────────────
 
@@ -72,5 +72,32 @@ describe('normalizeBrand — synonym map', () => {
   it('unknown brand is returned as-is after normalization (no synonym hit)', () => {
     // A brand not in the map just comes out lowercase / stripped
     expect(normalizeBrand('GenericBrand')).toBe('genericbrand')
+  })
+})
+
+// ─── matchesBrand() ───────────────────────────────────────────────────────────
+
+describe('matchesBrand', () => {
+  it('matches when brand field equals target', () => {
+    expect(matchesBrand({ brand: 'Organic Valley', name: 'Whole Milk' }, 'Organic Valley')).toBe(true)
+  })
+
+  it('matches when brand field is empty but name contains target', () => {
+    // Empty brand field — product name "Fairlife Whole Milk" contains brand "Fairlife"
+    expect(matchesBrand({ brand: '', name: 'Fairlife Whole Milk' }, 'Fairlife')).toBe(true)
+  })
+
+  it('does not match when brand field is empty and name lacks target', () => {
+    expect(matchesBrand({ brand: '', name: 'Great Value Whole Milk' }, 'Fairlife')).toBe(false)
+  })
+
+  it('does not match when brand field differs from target', () => {
+    expect(matchesBrand({ brand: 'Great Value', name: 'Whole Milk' }, 'Organic Valley')).toBe(false)
+  })
+
+  it('handles synonym-map variants — apostrophe vs none both match', () => {
+    // "Land O'Lakes" and "Land O Lakes" should both match each other
+    expect(matchesBrand({ brand: "Land O Lakes", name: 'Butter' }, "Land O'Lakes")).toBe(true)
+    expect(matchesBrand({ brand: "Land O'Lakes", name: 'Butter' }, 'Land O Lakes')).toBe(true)
   })
 })

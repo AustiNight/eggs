@@ -128,7 +128,7 @@ describe('KrogerClient.search — unit preference', () => {
 
 describe('KrogerClient.search — cascade integration', () => {
   it('stripped query matches and raw query is skipped', async () => {
-    // "1 head garlic" → stripped "garlic" returns results
+    // "1 head garlic" → stripped "garlic" returns results; raw query should never fire
     const fetchMock = makeFetchMock({
       'garlic': [makeProduct({ productId: 'p-garlic', description: 'Garlic Bulb', brand: 'Generic', price: 0.99, size: '1 each' })],
       '1 head garlic': [], // raw query returns nothing
@@ -137,6 +137,8 @@ describe('KrogerClient.search — cascade integration', () => {
     const result = await client.search({ name: '1 head garlic', locationIds: ['loc-1'] })
     expect(result).not.toBeNull()
     expect(result!.name).toContain('Garlic')
+    // token call + 1 product call (stripped only — raw skipped)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('raw fallback is used when stripped query returns no priced results', async () => {
@@ -149,6 +151,8 @@ describe('KrogerClient.search — cascade integration', () => {
     const result = await client.search({ name: 'bottle olive oil', locationIds: ['loc-1'] })
     expect(result).not.toBeNull()
     expect(result!.sku).toBe('item-p-oil')
+    // token call + 2 product calls (stripped then raw)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('cascades through multiple locations when primary has no priced match', async () => {
@@ -174,6 +178,42 @@ describe('KrogerClient.search — cascade integration', () => {
     const result = await client.search({ name: 'milk', locationIds: ['loc-1', 'loc-2'] })
     expect(result).not.toBeNull()
     expect(result!.matchedLocationId).toBe('loc-2')
+  })
+})
+
+describe('KrogerClient.search — empty-brand fallback (DESIGN.md §VI risk #5)', () => {
+  it('returns a product whose brand field is empty when its name contains the target brand', async () => {
+    const products = [
+      // brand field is empty; product name contains the target brand "Fairlife"
+      makeProduct({ productId: 'p1', description: 'Fairlife Whole Milk 52 fl oz', brand: '', price: 5.49, size: '52 fl oz' }),
+    ]
+    const client = new KrogerClient('id', 'secret', makeFetchMock({ 'milk': products, 'whole milk': products }))
+    const result = await client.search({ name: 'whole milk', brand: 'Fairlife', locationIds: ['loc-1'] })
+    expect(result).not.toBeNull()
+    expect(result!.name).toContain('Fairlife')
+  })
+
+  it('excludes a product whose brand field is empty and name does not contain the target brand', async () => {
+    const products = [
+      makeProduct({ productId: 'p1', description: 'Great Value Whole Milk', brand: '', price: 2.99, size: '64 oz' }),
+    ]
+    const client = new KrogerClient('id', 'secret', makeFetchMock({ 'milk': products, 'whole milk': products }))
+    const result = await client.search({ name: 'whole milk', brand: 'Fairlife', locationIds: ['loc-1'] })
+    expect(result).toBeNull()
+  })
+})
+
+describe('KrogerClient.search — synonym-map brand variants', () => {
+  it('brand filter handles apostrophe vs no-apostrophe variants (Land O\'Lakes)', async () => {
+    // Store returns brand "Land O Lakes" (no apostrophe)
+    const products = [
+      makeProduct({ productId: 'p1', description: 'Land O Lakes Butter', brand: 'Land O Lakes', price: 4.29, size: '16 oz' }),
+    ]
+    const client = new KrogerClient('id', 'secret', makeFetchMock({ 'butter': products, 'land o lakes butter': products }))
+    // Caller passes brand with apostrophe — should match via synonym map
+    const result = await client.search({ name: 'land o lakes butter', brand: "Land O'Lakes", locationIds: ['loc-1'] })
+    expect(result).not.toBeNull()
+    expect(result!.brand).toBe('Land O Lakes')
   })
 })
 

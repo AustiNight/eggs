@@ -17,6 +17,7 @@ import { KrogerClient } from '../integrations/kroger.js'
 import { WalmartClient } from '../integrations/walmart.js'
 import { getShopUrl, normalizeBanner } from '../integrations/store-urls.js'
 import { validateUrls } from '../lib/url-validator.js'
+import type { StoreSearchResult } from '../integrations/StoreAdapter.js'
 
 const plan = new Hono<HonoEnv>()
 
@@ -57,23 +58,13 @@ async function searchKroger(
 ): Promise<{
   storeName: string
   storeAddress: string
-  items: Record<string, {
-    sku: string; name: string; brand: string
-    regularPrice: number; promoPrice: number | null
-    productUrl: string; size: string
-    matchedLocationId: string
-  }>
+  items: Record<string, StoreSearchResult>
 } | null> {
   if (locations.length === 0) return null
   const primary = locations[0]
   const locationIds = locations.map(l => l.locationId)
 
-  const items: Record<string, {
-    sku: string; name: string; brand: string
-    regularPrice: number; promoPrice: number | null
-    productUrl: string; size: string
-    matchedLocationId: string
-  }> = {}
+  const items: Record<string, StoreSearchResult> = {}
 
   await Promise.allSettled(
     ingredients.map(async (ingredient) => {

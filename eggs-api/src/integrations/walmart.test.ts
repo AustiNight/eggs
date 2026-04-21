@@ -147,6 +147,8 @@ describe('WalmartClient.search — strip-and-retry cascade', () => {
     const result = await client.search({ name: '1 head garlic' })
     expect(result).not.toBeNull()
     expect(result!.name).toContain('Garlic')
+    // Only 1 fetch — stripped query succeeded, raw skipped
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('falls back to raw query when stripped returns nothing', async () => {
@@ -160,6 +162,32 @@ describe('WalmartClient.search — strip-and-retry cascade', () => {
     const result = await client.search({ name: 'bottle olive oil' })
     expect(result).not.toBeNull()
     expect(result!.sku).toBe('55')
+    // 2 fetches — stripped (no results) then raw
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+// ─── Empty-brand fallback tests (DESIGN.md §VI risk #5) ───────────────────────
+
+describe('WalmartClient.search — empty-brand fallback', () => {
+  it('returns a product whose brandName is empty when its name contains the target brand', async () => {
+    const items = [
+      // brandName is empty; product name contains "Fairlife"
+      makeWalmartProduct({ itemId: 77, name: 'Fairlife Whole Milk 52 fl oz', brandName: '', msrp: 5.49 }),
+    ]
+    const client = makeClient(makeFetchMock({ 'whole milk': items, 'milk': items }))
+    const result = await client.search({ name: 'whole milk', brand: 'Fairlife' })
+    expect(result).not.toBeNull()
+    expect(result!.name).toContain('Fairlife')
+  })
+
+  it('excludes a product whose brandName is empty and name does not contain the target brand', async () => {
+    const items = [
+      makeWalmartProduct({ itemId: 88, name: 'Great Value Whole Milk', brandName: '', msrp: 2.99 }),
+    ]
+    const client = makeClient(makeFetchMock({ 'whole milk': items, 'milk': items }))
+    const result = await client.search({ name: 'whole milk', brand: 'Fairlife' })
+    expect(result).toBeNull()
   })
 })
 
@@ -175,5 +203,25 @@ describe('WalmartClient.getPriceForIngredient — legacy shim', () => {
     expect(result).not.toBeNull()
     expect(result!.regularPrice).toBe(2.99)
     expect(result!.brand).toBe('Great Value')
+  })
+
+  it('delegates to search with name+zipCode — fetch URL contains the zip', async () => {
+    const items = [
+      makeWalmartProduct({ itemId: 99, name: 'Whole Milk', brandName: 'Great Value', msrp: 3.49 }),
+    ]
+    // Capture actual fetch calls to verify the zipCode is forwarded
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      const query = url.searchParams.get('query') ?? ''
+      const products = query === 'milk' ? items : []
+      return new Response(JSON.stringify({ items: products }), { status: 200 })
+    }) as unknown as typeof fetch
+    const client = makeClient(fetchMock)
+    const result = await client.getPriceForIngredient('milk', '12345')
+    expect(result).not.toBeNull()
+    expect(result!.regularPrice).toBe(3.49)
+    // Verify the zip code was forwarded in the fetch URL
+    const calledUrl = new URL(String((fetchMock as ReturnType<typeof vi.fn>).mock.calls[0][0]))
+    expect(calledUrl.searchParams.get('zipCode')).toBe('12345')
   })
 })

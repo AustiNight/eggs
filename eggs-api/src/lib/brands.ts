@@ -136,3 +136,26 @@ export function normalizeBrand(raw: string): string {
   const stripped = _strip(raw)
   return SYNONYM_MAP.get(stripped) ?? stripped
 }
+
+/**
+ * Check whether a store product matches a caller-supplied brand.
+ *
+ * Per DESIGN.md §VI risk #5: if the store didn't populate the brand field,
+ * fall back to looking for the target brand within the product name before
+ * excluding the result.
+ *
+ * @param result  - Object with `brand` (store-returned) and `name` (product name).
+ * @param targetBrand - The brand the caller is looking for.
+ */
+export function matchesBrand(
+  result: { brand: string; name: string },
+  targetBrand: string
+): boolean {
+  const targetNorm = normalizeBrand(targetBrand)
+  const resultBrandNorm = normalizeBrand(result.brand)
+  if (resultBrandNorm === targetNorm) return true
+  // Empty-brand fallback: if store didn't populate brand field, look for
+  // the target brand in the product name.
+  if (resultBrandNorm === '' && normalizeBrand(result.name).includes(targetNorm)) return true
+  return false
+}
