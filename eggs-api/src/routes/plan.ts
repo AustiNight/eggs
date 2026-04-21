@@ -770,14 +770,20 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
       meta: {
         location: body.location,
         storesQueried: finalStores.map(s => ({ name: s.storeName, source: s.priceSource })),
-        modelUsed: '',
+        // Sentinel: interimPlan is only consumed by computeBestBasketTotal and never persisted.
+        modelUsed: '__interim__',
         budgetMode: body.budget?.mode ?? 'calculate',
       },
       ingredients,
       stores: finalStores,
       summary: { subtotal: 0, estimatedTax: 0, total: 0, realPriceCount: 0, estimatedPriceCount: 0 },
     }
-    const userProfile: UserProfile = { avoid_brands: user?.avoid_brands ?? [] }
+    const userProfile: UserProfile = {
+      avoid_brands: [
+        ...(user?.avoid_brands ?? []),
+        ...(body.settings?.avoidBrands ?? []),
+      ],
+    }
     const bestBasket = computeBestBasketTotal(interimPlan, userProfile)
     subtotal = bestBasket.subtotal
     tax = bestBasket.estimatedTax

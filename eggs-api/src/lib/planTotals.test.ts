@@ -225,7 +225,11 @@ describe('computeBestBasketTotal — legacy plan without meta.specs', () => {
     expect(result.total).not.toBeNaN()
     expect(result.subtotal).toBeGreaterThan(0)
 
-    // The recomputed total should be less than the buggy summary total
+    // Legacy plans have no meta.specs, so extractSpecs synthesizes with unit: 'each'.
+    // Mass-unit store items (lb, oz) may fall through countable fallback to unit_mismatch
+    // exclusion when their displayName isn't a COUNTABLES entry — producing a subtotal
+    // lower than a real resolved-spec computation. The assertion bounds reflect that
+    // tolerance. M9 (populating meta.specs at write time) removes this gap.
     expect(result.total).toBeLessThan(planLegacy.summary.total)
   })
 
@@ -271,5 +275,80 @@ describe('computeBestBasketTotal — estimatedTax invariant', () => {
     const TAX_RATE = 0.0825
     const result = computeBestBasketTotal(planWithSpecs, noUser)
     expect(result.estimatedTax).toBeCloseTo(result.subtotal * TAX_RATE, 2)
+  })
+})
+
+describe('computeBestBasketTotal — avoid_brands exclusion', () => {
+  it('respects user avoid_brands — excludes matching candidates from winner selection', () => {
+    // Setup: one ingredient (eggs), two stores.
+    // Cheaper store (Aldi, $3.50) sells "Great Value Eggs" — a brand to avoid.
+    // More-expensive store (Kroger, $4.50) sells "Kroger Eggs" — not avoided.
+    // Expect: winner is Kroger (the more expensive store); subtotal reflects $4.50.
+
+    const aldiBranded = makeStore({
+      storeName: 'Aldi',
+      distanceMiles: 1.0,
+      items: [
+        makeItem({
+          ingredientId: 'eggs-spec',
+          name: 'Great Value Eggs 1 Dozen',
+          unit: '1 dozen',
+          lineTotal: 3.50,
+          unitPrice: 3.50,
+        }),
+      ],
+    })
+
+    const krogerUnbranded = makeStore({
+      storeName: 'Kroger',
+      distanceMiles: 1.2,
+      items: [
+        makeItem({
+          ingredientId: 'eggs-spec',
+          name: 'Kroger Eggs 1 Dozen',
+          unit: '1 dozen',
+          lineTotal: 4.50,
+          unitPrice: 4.50,
+        }),
+      ],
+    })
+
+    const singleIngredientPlan: ShoppingPlan = {
+      id: 'plan-avoid-brands',
+      generatedAt: new Date().toISOString(),
+      meta: {
+        location: { lat: 32.7767, lng: -96.7970, label: 'Dallas, TX 75201' },
+        storesQueried: [],
+        modelUsed: 'test',
+        budgetMode: 'calculate',
+        specs: [
+          {
+            id: 'eggs-spec',
+            sourceText: 'eggs',
+            displayName: 'eggs',
+            categoryPath: ['produce', 'eggs'],
+            brand: null,
+            brandLocked: false,
+            quantity: 1,
+            unit: 'dozen',
+            resolutionTrace: [],
+            confidence: 'high',
+          },
+        ],
+      },
+      ingredients: [
+        { id: 'eggs-spec', name: 'eggs', quantity: 1, unit: 'dozen', category: 'produce', sources: [] },
+      ],
+      stores: [aldiBranded, krogerUnbranded],
+      summary: { subtotal: 0, estimatedTax: 0, total: 0, realPriceCount: 2, estimatedPriceCount: 0 },
+    }
+
+    const avoidGreatValue: UserProfile = { avoid_brands: ['great value'] }
+    const result = computeBestBasketTotal(singleIngredientPlan, avoidGreatValue)
+
+    // Great Value (Aldi) must be excluded; Kroger must win at $4.50
+    expect(result.subtotal).toBeCloseTo(4.50, 2)
+    expect(result.winnerStoreNames).toContain('Kroger')
+    expect(result.winnerStoreNames).not.toContain('Aldi')
   })
 })

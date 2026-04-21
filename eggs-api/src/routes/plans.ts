@@ -32,6 +32,9 @@ plans.get('/', requireAuth, async (c) => {
     userProfile = { avoid_brands: user?.avoid_brands ?? [] }
   }
 
+  // Synchronous lazy recompute across up to 20 rows (bounded by the .limit above).
+  // computeBestBasketTotal is pure and typically O(specs × stores × items); with
+  // MVP-sized plans (~3-10 specs, ~3-5 stores), this stays well inside Worker CPU budget.
   const plans = data.map((row) => {
     // Determine the best_basket_total to expose
     let bestBasketTotal: number | null = row.best_basket_total ?? null
