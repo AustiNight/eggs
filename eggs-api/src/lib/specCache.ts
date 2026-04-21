@@ -70,16 +70,24 @@ export class SpecCache {
 
 /**
  * Light normalization for L2 lookup. Catches what users often type differently:
- * lowercase, collapse whitespace, trim.
+ * lowercase, collapse whitespace, trim, and unicode punctuation variants.
  *
  * Do NOT strip numbers — "2 lbs" vs "3 lbs" are different specs.
  * Do NOT strip punctuation aggressively — "fat-free milk" vs "fat free milk"
  * should both be captured but let L2 handle the merge.
+ *
+ * Unicode normalization ensures that en/em-dashes and curly quotes map to their
+ * ASCII equivalents so "chicken\u2013breast" and "chicken-breast" share the
+ * same L2 hash.
  */
 export function normalizeRaw(raw: string): string {
   return raw
+    .normalize('NFC')                              // canonicalize composed form
     .toLowerCase()
     .trim()
+    .replace(/[\u2013\u2014]/g, '-')               // en/em-dash → ascii hyphen
+    .replace(/[\u2018\u2019]/g, "'")               // curly single quote → ascii
+    .replace(/[\u201c\u201d]/g, '"')               // curly double quote → ascii
     .replace(/\s+/g, ' ')
 }
 

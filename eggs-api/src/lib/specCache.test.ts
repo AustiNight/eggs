@@ -182,4 +182,21 @@ describe('normalizeRaw', () => {
     expect(normalizeRaw('2 lbs chicken')).toBe('2 lbs chicken')
     expect(normalizeRaw('3 lbs chicken')).not.toBe(normalizeRaw('2 lbs chicken'))
   })
+
+  it('normalizes en-dash to ascii hyphen', () => {
+    // "chicken\u2013breast" (en-dash) should hash the same as "chicken-breast" (ascii hyphen)
+    expect(normalizeRaw('chicken\u2013breast')).toBe(normalizeRaw('chicken-breast'))
+  })
+
+  it('normalizes em-dash to ascii hyphen', () => {
+    expect(normalizeRaw('fat\u2014free milk')).toBe(normalizeRaw('fat-free milk'))
+  })
+
+  it('normalizes curly single quotes to ascii apostrophe', () => {
+    expect(normalizeRaw("land o\u2019lakes")).toBe(normalizeRaw("land o'lakes"))
+  })
+
+  it('normalizes curly double quotes to ascii double quote', () => {
+    expect(normalizeRaw('\u201ccheddar\u201d')).toBe(normalizeRaw('"cheddar"'))
+  })
 })

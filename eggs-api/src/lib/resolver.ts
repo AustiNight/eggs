@@ -18,6 +18,8 @@ import type { ShoppableItemSpec } from '../types/spec.js'
 import { validateSpec, CANONICAL_UNITS } from '../types/spec.js'
 import type { ModelProvider } from '../providers/index.js'
 import { SpecCache } from './specCache.js'
+import { stripUnitNoise } from './queryStrip.js'
+import type { StoreAdapter } from '../integrations/StoreAdapter.js'
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -179,7 +181,13 @@ export function naiveParse(rawText: string, id: string, priorTrace?: ResolutionT
   // If first token is a number, treat it as quantity
   const firstNum = parseFloat(tokens[0] ?? '')
   const quantity = !isNaN(firstNum) && firstNum > 0 ? firstNum : 1
-  const displayName = (!isNaN(parseFloat(tokens[0] ?? '')) ? tokens.slice(1) : tokens).join(' ') || trimmed
+  const remainingTokens = !isNaN(parseFloat(tokens[0] ?? '')) ? tokens.slice(1) : tokens
+
+  // Strip unit noise (e.g. "lbs", "oz", "gal") from the display name so
+  // "3 lbs ground beef" → displayName "ground beef" not "lbs ground beef".
+  const rawDisplayName = remainingTokens.join(' ') || trimmed
+  const strippedDisplayName = stripUnitNoise(rawDisplayName)
+  const displayName = strippedDisplayName || rawDisplayName
 
   return {
     id,
@@ -190,9 +198,35 @@ export function naiveParse(rawText: string, id: string, priorTrace?: ResolutionT
     brandLocked: false,
     quantity,
     unit: 'each',
-    resolutionTrace: priorTrace ?? [],
+    // Cap to 3 entries to match validateSpec.max(3) invariant.
+    // A caller supplying 4+ entries would silently violate the zod schema otherwise.
+    resolutionTrace: (priorTrace ?? []).slice(0, 3),
     confidence: 'low',
   }
+}
+
+// ─── needsPreSearch — pre-search gate helper ─────────────────────────────────
+//
+// Determines whether a pre-search against live store adapters should fire for
+// a given raw ingredient text.  Matches DESIGN.md §I-2:
+//   "pre-search only when: confidence === 'low' OR unit missing"
+//
+// `naiveParse` always emits `unit: 'each'` as the fallback.  We treat the
+// combination of `quantity === 1 AND unit === 'each'` as the literal fallback
+// signature (i.e. "we couldn't parse a real unit from the text").  A plain
+// countable item like "1 dozen eggs" will still parse quantity=1 but the
+// unit-noise pass won't transform 'each' to 'dozen' — so we conservatively
+// trigger pre-search to let the LLM confirm.  The cost of an extra pre-search
+// is low; the cost of missing real-unit disambiguation is high.
+//
+// Returns true  → fire pre-search before calling resolveItem.
+// Returns false → skip pre-search (spec is already high-confidence enough).
+export function needsPreSearch(rawText: string): boolean {
+  const spec = naiveParse(rawText, '_probe')
+  // The naive parse falls back to quantity=1 + unit='each' when no quantity/unit
+  // was parseable.  That combination is our proxy for "low confidence / unit missing".
+  const isFallbackSignature = spec.quantity === 1 && spec.unit === 'each'
+  return isFallbackSignature || spec.confidence === 'low'
 }
 
 // ─── resolveItem ──────────────────────────────────────────────────────────────
@@ -244,16 +278,21 @@ export async function resolveItem(
       toolChoice,
     })
 
+    let timerId: ReturnType<typeof setTimeout> | undefined
     const timeoutPromise = new Promise<never>((_, reject) => {
-      const t = globalThis.setTimeout(
+      timerId = globalThis.setTimeout(
         () => reject(new Error(`resolveItem timeout after ${wallClockMs}ms`)),
         wallClockMs
       )
-      // In test environments (Vitest) clearTimeout works on the returned id
-      void t
     })
 
-    result = await Promise.race([llmCall, timeoutPromise])
+    try {
+      result = await Promise.race([llmCall, timeoutPromise])
+    } finally {
+      // Clear the dangling timer so it doesn't fire after the LLM call succeeds,
+      // burning Worker CPU on a rejection that nobody is listening to anymore.
+      if (timerId !== undefined) globalThis.clearTimeout(timerId)
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[resolver] provider error or timeout for "${rawText}": ${msg}`)
@@ -312,19 +351,19 @@ export async function resolveItem(
 // ─── preSearchCandidates — retrieval grounding helper ─────────────────────────
 //
 // Queries Kroger and/or Walmart in parallel for product candidates to ground
-// the LLM's clarification options. Accepts adapter-like objects for testability.
-// Each adapter only needs a `search({ name })` method.
+// the LLM's clarification options. Accepts StoreAdapter instances (M4 interface)
+// for testability. Uses the standard StoreAdapter.search() signature and
+// projects brand/name/size into StoreCandidate for injection into the LLM prompt.
 //
 // Deduplication: candidates with the same (brand, name) pair are collapsed to one.
 // Returns up to `maxResults` candidates (default 10).
 
-export interface SearchAdapter {
-  search(input: { name: string }): Promise<{ brand: string; name: string; size: string } | null>
-}
+// Re-export StoreAdapter so callers can import it from here or from StoreAdapter.ts.
+export type { StoreAdapter }
 
 export async function preSearchCandidates(
   rawText: string,
-  adapters: SearchAdapter[],
+  adapters: StoreAdapter[],
   timeoutMs: number = 800,
   maxResults: number = 10
 ): Promise<StoreCandidate[]> {
@@ -333,10 +372,13 @@ export async function preSearchCandidates(
   const settled = await Promise.allSettled(
     adapters.map((adapter) => {
       const adapterCall = adapter.search({ name: rawText })
+      let timerId: ReturnType<typeof setTimeout> | undefined
       const timeout = new Promise<null>((resolve) => {
-        globalThis.setTimeout(() => resolve(null), timeoutMs)
+        timerId = globalThis.setTimeout(() => resolve(null), timeoutMs)
       })
-      return Promise.race([adapterCall, timeout])
+      return Promise.race([adapterCall, timeout]).finally(() => {
+        if (timerId !== undefined) globalThis.clearTimeout(timerId)
+      })
     })
   )
 
@@ -350,8 +392,12 @@ export async function preSearchCandidates(
     const dedupeKey = `${r.brand}|${r.name}`
     if (!seen.has(dedupeKey)) {
       seen.add(dedupeKey)
+      // Project StoreSearchResult → StoreCandidate (prompt-injection shape)
       candidates.push({ brand: r.brand, name: r.name, size: r.size })
     }
+    // Cap at 10 candidates. With current M4 adapters each returning a single
+    // best-priced result, this cap is effectively unused — future-proofed for
+    // when adapters return ranked result lists.
     if (candidates.length >= maxResults) break
   }
 

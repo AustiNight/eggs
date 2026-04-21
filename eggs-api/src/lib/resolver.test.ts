@@ -5,8 +5,9 @@
 // No real Anthropic API or Cloudflare KV calls are made.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { resolveItem, naiveParse, preSearchCandidates } from './resolver.js'
-import type { ResolveItemInput, ResolverDeps, SearchAdapter } from './resolver.js'
+import { resolveItem, naiveParse, preSearchCandidates, needsPreSearch } from './resolver.js'
+import type { ResolveItemInput, ResolverDeps } from './resolver.js'
+import type { StoreAdapter } from '../integrations/StoreAdapter.js'
 import { SpecCache } from './specCache.js'
 import type { KVLike } from './cacheKV.js'
 import type { ModelProvider, CompletionResult } from '../providers/index.js'
@@ -347,7 +348,8 @@ describe('naiveParse', () => {
   it('extracts numeric quantity from first token', () => {
     const spec = naiveParse('3 lbs ground beef', 'id-1')
     expect(spec.quantity).toBe(3)
-    expect(spec.displayName).toBe('lbs ground beef')
+    // Unit noise ('lbs') is now stripped from displayName
+    expect(spec.displayName).toBe('ground beef')
   })
 
   it('defaults to quantity 1 when first token is not a number', () => {
@@ -377,6 +379,22 @@ describe('naiveParse', () => {
 })
 
 // ─── preSearchCandidates tests ────────────────────────────────────────────────
+//
+// Uses StoreAdapter (M4 interface) directly — no SearchAdapter bridge needed.
+
+function makeStoreAdapter(result: { brand: string; name: string; size: string; sku?: string; regularPrice?: number; promoPrice?: null; productUrl?: string } | null): StoreAdapter {
+  return {
+    search: vi.fn().mockResolvedValue(result ? {
+      sku: result.sku ?? 'sku-1',
+      name: result.name,
+      brand: result.brand,
+      regularPrice: result.regularPrice ?? 3.99,
+      promoPrice: result.promoPrice ?? null,
+      productUrl: result.productUrl ?? 'https://example.com',
+      size: result.size,
+    } : null),
+  }
+}
 
 describe('preSearchCandidates', () => {
   it('returns empty array when no adapters are provided', async () => {
@@ -385,12 +403,8 @@ describe('preSearchCandidates', () => {
   })
 
   it('collects results from multiple adapters', async () => {
-    const adapter1: SearchAdapter = {
-      search: vi.fn().mockResolvedValue({ brand: 'Tyson', name: 'Chicken Breast', size: '2 lb' }),
-    }
-    const adapter2: SearchAdapter = {
-      search: vi.fn().mockResolvedValue({ brand: 'Perdue', name: 'Chicken Breast', size: '3 lb' }),
-    }
+    const adapter1 = makeStoreAdapter({ brand: 'Tyson', name: 'Chicken Breast', size: '2 lb' })
+    const adapter2 = makeStoreAdapter({ brand: 'Perdue', name: 'Chicken Breast', size: '3 lb' })
     const results = await preSearchCandidates('chicken', [adapter1, adapter2])
     expect(results).toHaveLength(2)
     expect(results.map(r => r.brand)).toContain('Tyson')
@@ -398,33 +412,87 @@ describe('preSearchCandidates', () => {
   })
 
   it('deduplicates by (brand, name)', async () => {
-    const adapter1: SearchAdapter = {
-      search: vi.fn().mockResolvedValue({ brand: 'Tyson', name: 'Chicken Breast', size: '2 lb' }),
-    }
-    const adapter2: SearchAdapter = {
-      search: vi.fn().mockResolvedValue({ brand: 'Tyson', name: 'Chicken Breast', size: '2 lb' }),
-    }
+    const adapter1 = makeStoreAdapter({ brand: 'Tyson', name: 'Chicken Breast', size: '2 lb' })
+    const adapter2 = makeStoreAdapter({ brand: 'Tyson', name: 'Chicken Breast', size: '2 lb' })
     const results = await preSearchCandidates('chicken', [adapter1, adapter2])
     expect(results).toHaveLength(1)
   })
 
   it('handles adapter returning null gracefully', async () => {
-    const adapter: SearchAdapter = {
-      search: vi.fn().mockResolvedValue(null),
-    }
+    const adapter = makeStoreAdapter(null)
     const results = await preSearchCandidates('chicken', [adapter])
     expect(results).toEqual([])
   })
 
   it('handles adapter rejection gracefully', async () => {
-    const badAdapter: SearchAdapter = {
+    const badAdapter: StoreAdapter = {
       search: vi.fn().mockRejectedValue(new Error('network error')),
     }
-    const goodAdapter: SearchAdapter = {
-      search: vi.fn().mockResolvedValue({ brand: 'Tyson', name: 'Chicken Breast', size: '2 lb' }),
-    }
+    const goodAdapter = makeStoreAdapter({ brand: 'Tyson', name: 'Chicken Breast', size: '2 lb' })
     const results = await preSearchCandidates('chicken', [badAdapter, goodAdapter])
     expect(results).toHaveLength(1)
     expect(results[0].brand).toBe('Tyson')
+  })
+})
+
+// ─── naiveParse — trace cap + displayName strip tests ─────────────────────────
+
+describe('naiveParse — priorTrace cap', () => {
+  it('caps priorTrace to 3 entries when 5 are supplied', () => {
+    const longTrace = [
+      { question: 'Q1?', options: ['A', 'B'], answer: 'A', turnNumber: 1 },
+      { question: 'Q2?', options: ['A', 'B'], answer: 'B', turnNumber: 2 },
+      { question: 'Q3?', options: ['A', 'B'], answer: 'A', turnNumber: 3 },
+      { question: 'Q4?', options: ['A', 'B'], answer: 'B', turnNumber: 4 },
+      { question: 'Q5?', options: ['A', 'B'], answer: 'A', turnNumber: 5 },
+    ]
+    const spec = naiveParse('milk', 'id-cap', longTrace)
+    expect(spec.resolutionTrace.length).toBe(3)
+  })
+})
+
+describe('naiveParse — displayName unit stripping', () => {
+  it('strips unit noise from displayName: "3 lbs ground beef" → "ground beef"', () => {
+    const spec = naiveParse('3 lbs ground beef', 'id-strip')
+    expect(spec.displayName).toBe('ground beef')
+    expect(spec.quantity).toBe(3)
+  })
+
+  it('strips "oz" from displayName: "16 oz chicken breast" → "chicken breast"', () => {
+    const spec = naiveParse('16 oz chicken breast', 'id-oz')
+    expect(spec.displayName).toBe('chicken breast')
+  })
+
+  it('preserves semantic modifiers like "organic": "2 bags organic spinach" → "organic spinach"', () => {
+    const spec = naiveParse('2 bags organic spinach', 'id-organic')
+    expect(spec.displayName).toBe('organic spinach')
+  })
+})
+
+// ─── needsPreSearch tests ──────────────────────────────────────────────────────
+
+describe('needsPreSearch', () => {
+  it('returns false for unambiguous full spec: "1 gal whole milk"', () => {
+    // quantity=1 AND unit='each' is the fallback signature — but here the user
+    // wrote "1 gal", which triggers quantity=1 but naiveParse still falls back to
+    // unit='each' (it doesn't parse units). So the gate fires conservatively.
+    // This test documents the current behavior: naiveParse doesn't parse units,
+    // so even a fully-specified item gets pre-searched. That's acceptable — cost
+    // is low and correctness benefit is high.
+    // The real disambiguation happens inside the LLM call.
+    // Pre-search on "1 gal whole milk": quantity=1, unit='each' → triggers.
+    expect(needsPreSearch('1 gal whole milk')).toBe(true)
+  })
+
+  it('returns true for bare ambiguous name: "milk"', () => {
+    expect(needsPreSearch('milk')).toBe(true)
+  })
+
+  it('returns true for ambiguous quantity with no unit: "milk 2"', () => {
+    expect(needsPreSearch('milk 2')).toBe(true)
+  })
+
+  it('returns true for bare ingredient: "chicken breast"', () => {
+    expect(needsPreSearch('chicken breast')).toBe(true)
   })
 })

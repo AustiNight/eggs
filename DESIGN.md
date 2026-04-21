@@ -123,7 +123,8 @@ const askClarification = {
         minItems: 2,
         maxItems: 5,
       },
-      escape_hatch: { type: 'boolean', default: true },  // always allow free-text
+      // Note: escape_hatch (boolean) was removed. Free-text escape is always
+      // available at the UI modal layer; the prompt hint is unnecessary.
     },
   },
 }

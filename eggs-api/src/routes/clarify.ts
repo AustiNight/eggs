@@ -6,11 +6,11 @@ import { requireAuth } from '../middleware/auth.js'
 import { rateLimit } from '../middleware/ratelimit.js'
 import { getProvider } from '../providers/index.js'
 import { SpecCache } from '../lib/specCache.js'
-import { resolveItem, preSearchCandidates } from '../lib/resolver.js'
-import type { ResolutionTraceEntry, StoreCandidate, SearchAdapter } from '../lib/resolver.js'
+import { resolveItem, preSearchCandidates, needsPreSearch } from '../lib/resolver.js'
+import type { ResolutionTraceEntry, StoreCandidate } from '../lib/resolver.js'
 import { KrogerClient } from '../integrations/kroger.js'
 import { WalmartClient } from '../integrations/walmart.js'
-import type { StoreSearchResult } from '../integrations/StoreAdapter.js'
+import type { StoreAdapter } from '../integrations/StoreAdapter.js'
 
 const clarify = new Hono<HonoEnv>()
 
@@ -56,8 +56,11 @@ function buildPriorTrace(
   if (clarified) {
     return [
       {
-        question: 'How would you like this item specified?',
-        options: [clarified],
+        question: `Clarification for ${ingredient.name}`,
+        // Legacy compat: we don't know what options were originally offered — just the answer.
+        // Leave options empty; the answer is the truthful signal. M7+ will use resolutionTraces
+        // for full multi-turn history.
+        options: [],
         answer: clarified,
         turnNumber: 1,
       },
@@ -65,37 +68,6 @@ function buildPriorTrace(
   }
 
   return []
-}
-
-// ─── Pre-search adapter wrappers ──────────────────────────────────────────────
-//
-// Wraps KrogerClient / WalmartClient behind the SearchAdapter interface so
-// preSearchCandidates stays client-agnostic and testable.
-
-function makeKrogerAdapter(
-  client: KrogerClient,
-  locationIds: string[]
-): SearchAdapter {
-  return {
-    async search({ name }) {
-      const result: StoreSearchResult | null = await client.search({ name, locationIds })
-      if (!result) return null
-      return { brand: result.brand, name: result.name, size: result.size }
-    },
-  }
-}
-
-function makeWalmartAdapter(
-  client: WalmartClient,
-  zipCode?: string
-): SearchAdapter {
-  return {
-    async search({ name }) {
-      const result: StoreSearchResult | null = await client.search({ name, zipCode })
-      if (!result) return null
-      return { brand: result.brand, name: result.name, size: result.size }
-    },
-  }
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
@@ -118,6 +90,8 @@ clarify.post('/', requireAuth, rateLimit, async (c) => {
 
   const provider = getProvider(c, user ?? undefined)
 
+  // TODO: derive modelId from provider once multi-model support expands (Opus tier, etc.)
+  // For now AnthropicProvider always uses claude-haiku-4-5 — hardcode to match.
   const specCache = new SpecCache({
     ns: c.env.SPEC_CACHE,
     modelId: 'claude-haiku-4-5',
@@ -126,19 +100,18 @@ clarify.post('/', requireAuth, rateLimit, async (c) => {
   const body = await c.req.json<ClarifyBody>()
 
   // ── Build store adapters for retrieval grounding ──────────────────────────
-  // Pre-search fires on first turn (no priorTrace) to provide retrieval
-  // candidates to the LLM. Skip when store credentials aren't configured.
+  // KrogerClient and WalmartClient already implement StoreAdapter (M4) — pass
+  // them directly to preSearchCandidates. No bridge wrappers needed.
 
-  let krogerAdapters: SearchAdapter[] = []
-  let walmartAdapter: SearchAdapter | null = null
+  const storeAdapters: StoreAdapter[] = []
 
   if (c.env.KROGER_CLIENT_ID && c.env.KROGER_CLIENT_SECRET) {
-    const krogerClient = new KrogerClient(c.env.KROGER_CLIENT_ID, c.env.KROGER_CLIENT_SECRET)
-    // We don't have a user location here — pass an empty locationIds array.
+    // KrogerClient implements StoreAdapter (M4). We don't have a user location
+    // here — pass an empty locationIds array via the search call; Kroger adapter
+    // gracefully returns null when locationIds is empty.
     // For a real location-aware pre-search, callers can pass a location in the
-    // body (future milestone). For now, Kroger adapter gracefully returns null
-    // when locationIds is empty.
-    krogerAdapters = [makeKrogerAdapter(krogerClient, [])]
+    // body (future milestone).
+    storeAdapters.push(new KrogerClient(c.env.KROGER_CLIENT_ID, c.env.KROGER_CLIENT_SECRET))
   }
 
   if (
@@ -147,20 +120,16 @@ clarify.post('/', requireAuth, rateLimit, async (c) => {
     c.env.WALMART_PRIVATE_KEY &&
     c.env.WALMART_PUBLISHER_ID
   ) {
-    const walmartClient = new WalmartClient(
-      c.env.WALMART_CONSUMER_ID,
-      c.env.WALMART_KEY_VERSION,
-      c.env.WALMART_PRIVATE_KEY,
-      c.env.WALMART_PUBLISHER_ID,
-      c.env.WALMART_BASE_URL
+    storeAdapters.push(
+      new WalmartClient(
+        c.env.WALMART_CONSUMER_ID,
+        c.env.WALMART_KEY_VERSION,
+        c.env.WALMART_PRIVATE_KEY,
+        c.env.WALMART_PUBLISHER_ID,
+        c.env.WALMART_BASE_URL
+      )
     )
-    walmartAdapter = makeWalmartAdapter(walmartClient)
   }
-
-  const storeAdapters: SearchAdapter[] = [
-    ...krogerAdapters,
-    ...(walmartAdapter ? [walmartAdapter] : []),
-  ]
 
   // ── Process each ingredient ───────────────────────────────────────────────
 
@@ -171,9 +140,13 @@ clarify.post('/', requireAuth, rateLimit, async (c) => {
     body.ingredients.map(async (ingredient) => {
       const priorTrace = buildPriorTrace(ingredient, body)
 
-      // Pre-search only on the first turn (no prior Q/A) — warm retrieval candidates
+      // Pre-search gate: per DESIGN.md §I-2, fire only when confidence==='low'
+      // OR unit is missing (naive parse falls back to 'each'). This is more
+      // accurate than gating on first-turn only — an unambiguous item like
+      // "1 gal whole milk" skips pre-search even on turn 0, while a newly-ambiguous
+      // mid-loop item can still trigger pre-search if needed.
       let retrievalCandidates: StoreCandidate[] | undefined
-      if (priorTrace.length === 0 && storeAdapters.length > 0) {
+      if (needsPreSearch(ingredient.clarifiedName ?? ingredient.name) && storeAdapters.length > 0) {
         try {
           const candidates = await preSearchCandidates(
             ingredient.name,
