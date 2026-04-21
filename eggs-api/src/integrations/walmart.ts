@@ -13,10 +13,21 @@
 // The signed window is 180 seconds — we re-sign every request (no token caching).
 
 import type { WalmartLocation, WalmartProduct } from '../types/index.js'
+import type { StoreAdapter, StoreSearchInput, StoreSearchResult } from './StoreAdapter.js'
+import { normalizeBrand } from '../lib/brands.js'
+import { parseSize } from '../lib/units.js'
+import { stripUnitNoise } from '../lib/queryStrip.js'
+
+// Internal base-dimension table for unit-preference comparisons.
+const BASE_DIMENSION: Record<string, 'g' | 'ml' | 'count'> = {
+  g: 'g', kg: 'g', oz: 'g', lb: 'g',
+  ml: 'ml', l: 'ml', fl_oz: 'ml', cup: 'ml', pt: 'ml', qt: 'ml', gal: 'ml',
+  each: 'count', dozen: 'count', bunch: 'count', head: 'count', clove: 'count', pinch: 'count',
+}
 
 const DEFAULT_WALMART_BASE = 'https://developer.api.walmart.com/api-proxy/service/affil/product/v2'
 
-export class WalmartClient {
+export class WalmartClient implements StoreAdapter {
   private cachedKey: CryptoKey | null = null
   private baseUrl: string
 
@@ -26,7 +37,9 @@ export class WalmartClient {
     private privateKeyPem: string,
     private publisherId: string,
     /** Override base URL (for staging or future endpoint moves). Defaults to prod. */
-    baseUrl?: string
+    baseUrl?: string,
+    /** Optional fetch override — used in tests to avoid real network calls. */
+    private fetchImpl: typeof fetch = globalThis.fetch
   ) {
     this.baseUrl = (baseUrl?.trim() || DEFAULT_WALMART_BASE).replace(/\/$/, '')
   }
@@ -84,7 +97,7 @@ export class WalmartClient {
     const headers = await this.signHeaders()
     let res: Response
     try {
-      res = await fetch(url.toString(), { headers })
+      res = await this.fetchImpl(url.toString(), { headers })
     } catch (err) {
       console.error('[walmart] searchProducts fetch threw:', err instanceof Error ? err.message : err)
       return []
@@ -114,7 +127,7 @@ export class WalmartClient {
     const headers = await this.signHeaders()
     let res: Response
     try {
-      res = await fetch(url.toString(), { headers })
+      res = await this.fetchImpl(url.toString(), { headers })
     } catch {
       return []
     }
@@ -138,7 +151,7 @@ export class WalmartClient {
     const headers = await this.signHeaders()
     let res: Response
     try {
-      res = await fetch(url.toString(), { headers })
+      res = await this.fetchImpl(url.toString(), { headers })
     } catch {
       return []
     }
@@ -150,7 +163,103 @@ export class WalmartClient {
   }
 
   /**
-   * Top-level helper matching the KrogerClient shape.
+   * StoreAdapter.search — structured product search with strip-and-retry cascade,
+   * optional brand filter, and unit preference. Matches Kroger's search() behaviour.
+   *
+   * Cascade:
+   *   1. Run stripped query first (unit/packaging noise removed).
+   *   2. If stripped returns no priced candidates (or strip was a no-op), fall
+   *      back to the raw query.
+   *
+   * Brand filter (exclusive): if input.brand is present, only return a result
+   * whose normalizeBrand(result.brand) === normalizeBrand(input.brand). Return
+   * null if nothing matches.
+   *
+   * Unit preference (soft): if input.unit is present, prefer results in the
+   * same base dimension; fall back to all eligible if none match.
+   */
+  async search(input: StoreSearchInput): Promise<StoreSearchResult | null> {
+    const { name, brand, unit, zipCode } = input
+
+    const stripped = stripUnitNoise(name)
+    const queries = stripped && stripped !== name
+      ? [stripped, name]
+      : [name]
+
+    // Collect priced candidates across the cascade (stripped first, raw fallback).
+    let candidates: WalmartProduct[] = []
+    for (const query of queries) {
+      const items = await this.searchProducts(query, zipCode)
+      const priced = items.filter(item => {
+        const regular = item.msrp ?? item.salePrice
+        return typeof regular === 'number' && regular > 0 &&
+          !!(item.productTrackingUrl || item.productUrl)
+      })
+      if (priced.length) {
+        candidates = priced
+        if (query !== name) {
+          console.log(`[walmart] "${name}" → stripped "${query}" yielded ${priced.length} candidate(s)`)
+        }
+        break // Stripped pass succeeded — skip raw fallback
+      }
+    }
+
+    if (!candidates.length) {
+      console.log(`[walmart] no priced match for "${name}"`)
+      return null
+    }
+
+    // ── Brand filter ──────────────────────────────────────────────────────────
+    let eligible = candidates
+    if (brand) {
+      const normalizedInputBrand = normalizeBrand(brand)
+      const brandMatches = candidates.filter(
+        item => normalizeBrand(item.brandName ?? '') === normalizedInputBrand
+      )
+      if (!brandMatches.length) {
+        console.log(`[walmart] brand-lock "${brand}" — no matching products for "${name}"`)
+        return null
+      }
+      eligible = brandMatches
+    }
+
+    // ── Unit preference ───────────────────────────────────────────────────────
+    if (unit) {
+      const requestedBase = BASE_DIMENSION[unit]
+      if (requestedBase) {
+        const unitMatches = eligible.filter(item => {
+          const parsed = parseSize(item.size ?? '')
+          if (!parsed) return false
+          return BASE_DIMENSION[parsed.unit] === requestedBase
+        })
+        if (unitMatches.length) {
+          eligible = unitMatches
+        }
+        // If no unit matches, fall through (soft preference)
+      }
+    }
+
+    // ── Map first eligible candidate to StoreSearchResult ────────────────────
+    const best = eligible[0]!
+    const regular = best.msrp ?? best.salePrice!
+    const promo = best.salePrice !== undefined && best.salePrice < regular ? best.salePrice : null
+    const productUrl = (best.productTrackingUrl || best.productUrl)!
+
+    return {
+      sku: String(best.itemId),
+      name: best.name ?? name,
+      brand: best.brandName ?? '',
+      regularPrice: regular,
+      promoPrice: promo,
+      productUrl,
+      size: best.size ?? ''
+    }
+  }
+
+  /**
+   * Legacy shim — kept for backward compatibility with existing callers.
+   * Delegates to search(); callers may migrate to search() when ready.
+   *
    * Returns a mapped pricing record for the first good hit or null if nothing found.
    */
   async getPriceForIngredient(
@@ -165,24 +274,7 @@ export class WalmartClient {
     productUrl: string
     size: string
   } | null> {
-    const items = await this.searchProducts(ingredientName, zipCode)
-    for (const item of items) {
-      const regular = item.msrp ?? item.salePrice
-      if (typeof regular !== 'number' || regular <= 0) continue
-      const promo = item.salePrice !== undefined && item.salePrice < regular ? item.salePrice : null
-      const productUrl = item.productTrackingUrl || item.productUrl
-      if (!productUrl) continue
-      return {
-        sku: String(item.itemId),
-        name: item.name ?? ingredientName,
-        brand: item.brandName ?? '',
-        regularPrice: regular,
-        promoPrice: promo,
-        productUrl,
-        size: item.size ?? ''
-      }
-    }
-    return null
+    return this.search({ name: ingredientName, zipCode })
   }
 }
 
