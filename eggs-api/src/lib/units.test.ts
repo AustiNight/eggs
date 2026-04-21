@@ -178,4 +178,7 @@ describe('parseSize()', () => {
     expect(r!.unit).toBe('g')
     expect(r!.quantity).toBeCloseTo(566.99, 1)
   })
+  it('returns null for count multi-unit "1 dozen 6 each" — count is not a CanonicalUnit', () => {
+    expect(parseSize('1 dozen 6 each')).toBeNull()
+  })
 })

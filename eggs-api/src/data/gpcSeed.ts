@@ -8,7 +8,16 @@
  * Jonathan must review and swap in verified codes from:
  *   https://gpc-browser.gs1.org/
  *
- * Hierarchy: Segment → Family → Class → Brick
+ * Hierarchy convention: Segment → Family → [Class →] Brick
+ * The Class layer is present ONLY where it adds meaningful disambiguation value.
+ * Currently that is Beverages (Milk, Juice, Carbonated Soft Drinks, Water,
+ * Coffee, Tea each form a Class under the Beverages Family). All other families
+ * (Dairy, Meat, Produce, Bread, Dry Goods, Frozen, Canned, etc.) compress
+ * directly to Family → Brick, omitting the Class level. This is intentional and
+ * must remain consistent: M6's disambiguation loop derives categoryPath arrays
+ * from parent chains, and mixing depth conventions within a single family will
+ * produce incorrect path comparisons.
+ *
  * parent field: null = top-level segment, otherwise the id of the parent node.
  *
  * Coverage: ~90 entries across highest-traffic US grocery categories.

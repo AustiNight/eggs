@@ -82,12 +82,24 @@ const BRAND_SYNONYMS: BrandSynonymEntry[] = [
   { canonical: 'perdue',            variants: ['perdue farms'] },
 ]
 
-// Build a flat lookup map: variant (already normalized) → canonical
+// Build a flat lookup map: variant (normalized) → canonical
+// Every key and value is run through _strip() so that variants containing
+// pre-normalization characters (diacritics, double-spaces, apostrophes, etc.)
+// are still reachable via the Map.get() lookup path.
 const SYNONYM_MAP = new Map<string, string>()
 for (const entry of BRAND_SYNONYMS) {
-  SYNONYM_MAP.set(entry.canonical, entry.canonical) // self-maps
+  const canonical = _strip(entry.canonical)
+  SYNONYM_MAP.set(canonical, canonical) // self-maps
   for (const v of entry.variants) {
-    SYNONYM_MAP.set(v, entry.canonical)
+    SYNONYM_MAP.set(_strip(v), canonical)
+  }
+}
+
+// Defensive assertion: all keys must already be in normalized form.
+// Fires at module load so a bad table entry is caught immediately.
+for (const k of SYNONYM_MAP.keys()) {
+  if (k !== _strip(k)) {
+    throw new Error(`SYNONYM_MAP invariant violated: key "${k}" is not fully normalized`)
   }
 }
 
@@ -104,7 +116,8 @@ function _strip(raw: string): string {
     .replace(/[\u0300-\u036f]/g, '')   // strip combining marks
     // Step 2: lowercase
     .toLowerCase()
-    // Step 3: strip punctuation  . , ' " & ! \u2019 \u2018 hyphen-between-words
+    // Step 3: strip punctuation  . , ' " & ! \u2019 \u2018 (hyphens are preserved —
+    //   canonical forms like 'coca-cola', 'frito-lay', 'kit-kat' rely on them)
     .replace(/[.,'"&!\u2018\u2019\u201c\u201d]/g, '')
     // Step 4: collapse whitespace
     .replace(/\s+/g, ' ')

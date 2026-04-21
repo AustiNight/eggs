@@ -72,7 +72,6 @@ export function pricePerBase(
 ): { pricePerBase: number; base: 'g' | 'ml' | 'count' } | null {
   if (!size.qty) return null
   const { qty: baseQty, base } = toBase(size.qty, size.unit)
-  if (baseQty === 0) return null
   return { pricePerBase: price / baseQty, base }
 }
 
@@ -150,9 +149,11 @@ export function parseSize(raw: string): { quantity: number; unit: CanonicalUnit 
       const b1 = toBase(qty1, unit1)
       const b2 = toBase(qty2, unit2)
       if (b1.base === b2.base) {
+        // 'count' multi-unit (e.g. "1 dozen 6 each") is not representable as
+        // a CanonicalUnit because 'count' is not in the CanonicalUnit union.
+        if (b1.base === 'count') return null
+        const baseUnit: CanonicalUnit = b1.base === 'g' ? 'g' : 'ml'
         const totalBaseQty = b1.qty + b2.qty
-        // Emit as the base unit (g / ml / count — all valid CanonicalUnits)
-        const baseUnit = b1.base as CanonicalUnit
         return { quantity: totalBaseQty, unit: baseUnit }
       }
     }

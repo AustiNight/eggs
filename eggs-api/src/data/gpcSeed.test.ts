@@ -5,8 +5,10 @@ import type { GpcNode } from './gpcSeed.js'
 const nodes = Object.values(GPC_SEED) as GpcNode[]
 
 describe('gpcSeed structural integrity', () => {
-  it('has at least 75 entries', () => {
-    expect(nodes.length).toBeGreaterThanOrEqual(75)
+  it('has at least 100 entries', () => {
+    // Threshold is 100 — well below the DESIGN.md §IV-1a target of 150–200
+    // pending Jonathan's placeholder-ID review.
+    expect(nodes.length).toBeGreaterThanOrEqual(100)
   })
 
   it('has no duplicate ids', () => {

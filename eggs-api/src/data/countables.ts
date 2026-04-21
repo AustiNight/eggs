@@ -110,7 +110,9 @@ export const COUNTABLES: CountableEntry[] = [
     canonicalName: 'sweet potato',
     synonyms: ['sweet potatoes', 'yam', 'medium sweet potato'],
     typicalEachWeightG: 150,
-    gpcBrickId: '10006407',
+    // gpcBrickId intentionally omitted: sweet potato is a distinct GPC category
+    // from '10006407' (Potatoes). Pending Jonathan's review to assign a verified
+    // GS1 GPC brick code from https://gpc-browser.gs1.org/
   },
   {
     canonicalName: 'bell pepper',
