@@ -31,8 +31,10 @@ export class WalmartClient implements StoreAdapter {
     private publisherId: string,
     /** Override base URL (for staging or future endpoint moves). Defaults to prod. */
     baseUrl?: string,
-    /** Optional fetch override — used in tests to avoid real network calls. */
-    private fetchImpl: typeof fetch = globalThis.fetch
+    /** Optional fetch override — used in tests to avoid real network calls.
+     *  Arrow wrapper avoids "Illegal invocation" on Cloudflare Workers when
+     *  the default unbound `globalThis.fetch` is called as a method. */
+    private fetchImpl: typeof fetch = (input, init) => fetch(input, init)
   ) {
     this.baseUrl = (baseUrl?.trim() || DEFAULT_WALMART_BASE).replace(/\/$/, '')
   }

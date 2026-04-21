@@ -783,31 +783,39 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
 
     // M9: Use body.resolvedSpecs if the caller provided them (from /api/clarify),
     // else fall back to extractSpecs on an interim plan constructed from store results.
+    //
+    // IMPORTANT: /api/clarify returns `specs` ONLY for items that did NOT need
+    // clarification. Clarified items come back via `resolvedClarifications` on
+    // the subsequent /api/price-plan call with no corresponding spec. So even
+    // when `body.resolvedSpecs` is populated it may be missing some ingredients.
+    // We always synthesize a full spec list from the interim plan, then overlay
+    // the client-provided specs by id. That way every ingredient is guaranteed
+    // to have a spec that `selectWinner` can operate on.
+    let clientSpecs: ShoppableItemSpec[] = []
     if (body.resolvedSpecs && body.resolvedSpecs.length > 0) {
       try {
-        resolvedSpecs = body.resolvedSpecs.map(validateSpecInput) as ShoppableItemSpec[]
+        clientSpecs = body.resolvedSpecs.map(validateSpecInput) as ShoppableItemSpec[]
       } catch (err) {
-        console.warn('[plan] resolvedSpecs validation failed, falling back to extractSpecs:', err)
-        // Fall through to extractSpecs below
+        console.warn('[plan] resolvedSpecs validation failed, falling back to synthesized specs:', err)
       }
     }
-    if (!resolvedSpecs || resolvedSpecs.length === 0) {
-      // Build a minimal interim plan so extractSpecs can synthesize from store items.
-      const interimPlan: ShoppingPlan = {
-        id: planId,
-        generatedAt: new Date().toISOString(),
-        meta: {
-          location: body.location,
-          storesQueried: finalStores.map(s => ({ name: s.storeName, source: s.priceSource })),
-          modelUsed: '__interim__',
-          budgetMode: body.budget?.mode ?? 'calculate',
-        },
-        ingredients,
-        stores: finalStores,
-        summary: { subtotal: 0, estimatedTax: 0, total: 0, realPriceCount: 0, estimatedPriceCount: 0 },
-      }
-      resolvedSpecs = extractSpecs(interimPlan)
+
+    const interimPlan: ShoppingPlan = {
+      id: planId,
+      generatedAt: new Date().toISOString(),
+      meta: {
+        location: body.location,
+        storesQueried: finalStores.map(s => ({ name: s.storeName, source: s.priceSource })),
+        modelUsed: '__interim__',
+        budgetMode: body.budget?.mode ?? 'calculate',
+      },
+      ingredients,
+      stores: finalStores,
+      summary: { subtotal: 0, estimatedTax: 0, total: 0, realPriceCount: 0, estimatedPriceCount: 0 },
     }
+    const synthesizedSpecs = extractSpecs(interimPlan)
+    const clientSpecsById = new Map(clientSpecs.map(s => [s.id, s]))
+    resolvedSpecs = synthesizedSpecs.map(s => clientSpecsById.get(s.id) ?? s)
 
     // Compute per-item winners and attach to the plan.
     planWinners = resolvedSpecs.map(spec => selectWinner(spec, finalStores, userProfile))

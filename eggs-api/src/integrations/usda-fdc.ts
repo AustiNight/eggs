@@ -97,7 +97,9 @@ export class UsdaFdcClient {
 
   constructor(opts: UsdaFdcClientOptions) {
     this.apiKey = opts.apiKey
-    this.fetchImpl = opts.fetchImpl ?? fetch
+    // Arrow wrapper avoids "Illegal invocation" on Cloudflare Workers when the
+    // default unbound `globalThis.fetch` is called as a method.
+    this.fetchImpl = opts.fetchImpl ?? ((input, init) => fetch(input, init))
     this.sleepMs = opts.sleepMs ?? RETRY_DELAY_MS
 
     // ── Cached search ─────────────────────────────────────────────────────────

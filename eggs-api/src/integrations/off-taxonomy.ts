@@ -104,7 +104,9 @@ export class OffTaxonomyClient {
   private readonly searchCached: (term: string, country: string, pageSize: number) => Promise<OffProduct[]>
 
   constructor(opts: OffTaxonomyClientOptions) {
-    this.fetchImpl = opts.fetchImpl ?? fetch
+    // Arrow wrapper avoids "Illegal invocation" on Cloudflare Workers when the
+    // default unbound `globalThis.fetch` is called as a method.
+    this.fetchImpl = opts.fetchImpl ?? ((input, init) => fetch(input, init))
 
     // ── Taxonomy cache ────────────────────────────────────────────────────────
     // All three taxonomy methods (getParents, getChildren, getSynonyms) share

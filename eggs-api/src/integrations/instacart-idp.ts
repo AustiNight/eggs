@@ -63,7 +63,9 @@ export class IdpClient {
 
   constructor(opts: IdpClientOptions) {
     this.apiKey = opts.apiKey
-    this.fetchImpl = opts.fetchImpl ?? fetch
+    // Arrow wrapper avoids "Illegal invocation" on Cloudflare Workers when the
+    // default unbound `globalThis.fetch` is called as a method.
+    this.fetchImpl = opts.fetchImpl ?? ((input, init) => fetch(input, init))
     this.baseUrl = opts.baseUrl ?? DEFAULT_BASE_URL
   }
 
