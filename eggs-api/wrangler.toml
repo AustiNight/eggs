@@ -19,19 +19,19 @@ id = "61e42f6b29bb45c6b64989befe3fcf89"
 # Create via: wrangler kv namespace create FDC_CACHE
 [[kv_namespaces]]
 binding = "FDC_CACHE"
-id = "REPLACE_ME_FDC_CACHE_ID"
+id = "b0005754d96a4c2e96fca38d047a3499"
 
 # Open Food Facts taxonomy graph cache. 7d TTL.
 # Create via: wrangler kv namespace create ONTOLOGY_CACHE
 [[kv_namespaces]]
 binding = "ONTOLOGY_CACHE"
-id = "REPLACE_ME_ONTOLOGY_CACHE_ID"
+id = "248e56f0e8bf46ef94d7fb7e1011302d"
 
 # Resolved ShoppableItemSpec cache. 30d TTL.
 # Create via: wrangler kv namespace create SPEC_CACHE
 [[kv_namespaces]]
 binding = "SPEC_CACHE"
-id = "REPLACE_ME_SPEC_CACHE_ID"
+id = "20c95052636d417f96f31294cdadd08b"
 
 [vars]
 FREE_MONTHLY_LIMIT = "3"
