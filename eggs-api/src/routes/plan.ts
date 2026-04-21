@@ -779,9 +779,11 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
       summary: { subtotal: 0, estimatedTax: 0, total: 0, realPriceCount: 0, estimatedPriceCount: 0 },
     }
     const userProfile: UserProfile = {
+      // Request-first to match the AI-prompt helper's order (line ~165) — the
+      // per-request setting logically takes precedence over the account default.
       avoid_brands: [
-        ...(user?.avoid_brands ?? []),
         ...(body.settings?.avoidBrands ?? []),
+        ...(user?.avoid_brands ?? []),
       ],
     }
     const bestBasket = computeBestBasketTotal(interimPlan, userProfile)

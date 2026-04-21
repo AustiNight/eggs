@@ -29,6 +29,7 @@ plans.get('/', requireAuth, async (c) => {
   let userProfile: UserProfile | null = null
   if (shoppingV2) {
     const { data: user } = await supabase.from('users').select('avoid_brands').eq('id', userId).single()
+    // No per-request avoidBrands on list GET — DB profile only.
     userProfile = { avoid_brands: user?.avoid_brands ?? [] }
   }
 
