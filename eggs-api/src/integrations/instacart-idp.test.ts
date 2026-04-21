@@ -101,6 +101,11 @@ describe('IdpClient.createShoppingListPage', () => {
 
     const [_url, init] = fetchMock.mock.calls[0]
     expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer super-secret-key')
+
+    // Also verify null linkbackUrl serializes as null in the body
+    // (not undefined or omitted) — the API explicitly accepts null.
+    const body = JSON.parse(init.body as string)
+    expect(body.landing_page_configuration.partner_linkback_url).toBeNull()
   })
 
   // ── Test 4: Non-2xx throws ────────────────────────────────────────────────

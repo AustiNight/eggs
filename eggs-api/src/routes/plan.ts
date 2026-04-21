@@ -829,9 +829,10 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     try {
       const idp = new IdpClient({ apiKey: c.env.INSTACART_IDP_API_KEY })
       const idpTitle = `E.G.G.S. Shopping List — ${new Date().toISOString().slice(0, 10)}`
-      // planId is not yet assigned (assigned below); use a stable temporary value.
-      // The UUID is generated further down; we pass a placeholder linkback that
-      // will be embedded in the stored plan for display purposes.
+      // TODO: generate planId (crypto.randomUUID()) before this block so the
+      // linkback can be `https://eggs.app/plan/{planId}` per DESIGN.md §III.
+      // Current placeholder works for the button render but loses the deep-link
+      // back to the specific plan.
       const idpLinkback = 'https://eggs.app'
       const idpResult = await idp.createShoppingListPage(resolvedSpecs, idpTitle, idpLinkback)
       instacartUrl = idpResult.productsLinkUrl
