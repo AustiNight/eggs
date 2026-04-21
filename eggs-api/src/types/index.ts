@@ -24,6 +24,14 @@ export interface Env {
   RATE_LIMIT_KV: KVNamespace
   /** Per-(banner,ingredient) resolved StoreItem cache with 24h TTL. */
   URL_CACHE: KVNamespace
+  /** USDA FDC Branded Foods response cache. 7d TTL. (M3) */
+  FDC_CACHE: KVNamespace
+  /** Open Food Facts taxonomy graph cache. 7d TTL. (M3) */
+  ONTOLOGY_CACHE: KVNamespace
+  /** Resolved ShoppableItemSpec cache. 30d TTL. (M3/M6) */
+  SPEC_CACHE: KVNamespace
+  /** USDA FoodData Central API key — register free at https://api.data.gov/signup/ */
+  FDC_API_KEY: string
   FREE_MONTHLY_LIMIT: string
   ANTHROPIC_API_KEY: string
   CLERK_SECRET_KEY: string
