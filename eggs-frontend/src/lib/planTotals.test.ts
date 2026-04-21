@@ -32,6 +32,13 @@ describe('getPlanTotal', () => {
     expect(getPlanTotal(plan)).toBe(42.50)
   })
 
+  it('returns 0 for best_basket_total: 0 — not a missing-value case (Path 1 zero guard)', () => {
+    // Regression guard: a truthy check (`if (plan.best_basket_total)`) would
+    // incorrectly fall through to recompute for a legitimate $0 total.
+    const plan = makePlan({ best_basket_total: 0 })
+    expect(getPlanTotal(plan)).toBe(0)
+  })
+
   // ─── Test 2: Path 2 — recompute from stores when column is null ────────────
 
   it('recomputes cheapest-per-ingredient from stores when best_basket_total is null', () => {

@@ -12,6 +12,17 @@ const TAX_RATE = 0.0825
  *      ingredientId (simplification: no brand filter or unit normalization).
  *   3. Last-resort: plan.plan_data.summary.total (the legacy bugged value)
  *      with console.warn.
+ *
+ * Known divergence vs. server computeBestBasketTotal:
+ *   - Frontend recompute (Path 2) does NOT apply `avoid_brands` filtering. A user
+ *     with avoid_brands set will see a slightly lower Dashboard total than the
+ *     server's selectWinner-driven total for the same plan, because the frontend
+ *     may pick an avoided-brand winner the server would exclude.
+ *   - Tax rounding also differs subtly: server rounds subtotal and tax separately;
+ *     frontend folds both into a single multiplication then rounds once. Max $0.01
+ *     delta on typical grocery runs.
+ *   - Both drifts are acceptable for display-only Dashboard widgets. When the
+ *     server fills `best_basket_total` (Path 1), there is no drift.
  */
 export function getPlanTotal(plan: ShoppingPlanRecord): number {
   // Path 1: column (may be null on legacy rows or when SHOPPING_V2 was off at write time)
