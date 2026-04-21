@@ -1,6 +1,6 @@
 # E.G.G.S. Test Coverage Matrix
 
-**Last updated:** 2026-04-18  
+**Last updated:** 2026-04-19  
 **Rule:** Every new feature or change that may impact automated testing must update this file — even if the automation isn't written yet. The matrix is the source of truth for what tests *should* exist.
 
 ---
@@ -85,6 +85,19 @@
 | Store header shows "Live API" vs "AI search" label | Unit | 📋 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/PlanResult.test.tsx` | |
 | Total cost summary correct | Unit | 📋 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/PlanResult.test.tsx` | |
 | "Shop All" button opens product URLs | E2E | 📋 | 📋 | 📋 | 📋 | `e2e/plan-flow.spec.ts` | |
+| resolveWinner: override candidate returned when override exists | Unit | 🟡 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/bestBasket.test.ts` | M9 |
+| resolveWinner: plan winner returned when no override | Unit | 🟡 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/bestBasket.test.ts` | M9 |
+| resolveWinner: returns null when plan winner is null + no override | Unit | 🟡 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/bestBasket.test.ts` | M9 |
+| resolveWinner: null override explicitly wins over plan winner | Unit | 🟡 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/bestBasket.test.ts` | M9 |
+| computeDisplayedTotal: sums all winners + tax when no overrides | Unit | 🟡 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/bestBasket.test.ts` | M9 |
+| computeDisplayedTotal: uses overridden candidate total instead of plan winner | Unit | 🟡 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/bestBasket.test.ts` | M9 |
+| computeDisplayedTotal: null winner contributes $0 (no match) | Unit | 🟡 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/bestBasket.test.ts` | M9 |
+| BestBasketView renders when plan.winners is populated (V2 path) | Manual | ➖ | ➖ | ➖ | ➖ | `scripts/manual-verification/m9-best-basket.md` | M9 — manual browser only |
+| ItemSwapSelector opens on Swap click, shows eligible candidates | Manual | ➖ | ➖ | ➖ | ➖ | `scripts/manual-verification/m9-best-basket.md` | M9 — manual browser only |
+| Swap updates displayed winner and recalculates total | Manual | ➖ | ➖ | ➖ | ➖ | `scripts/manual-verification/m9-best-basket.md` | M9 — manual browser only |
+| Avoid-brand warning icon + tooltip renders when warning present | Manual | ➖ | ➖ | ➖ | ➖ | `scripts/manual-verification/m9-best-basket.md` | M9 — manual browser only |
+| LegacyPlanView renders unchanged when plan.winners absent | Unit | 🟡 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/PlanResult.test.tsx` | M9 — legacy path unchanged |
+| PerStorePanels section is collapsed by default | Manual | ➖ | ➖ | ➖ | ➖ | `scripts/manual-verification/m9-best-basket.md` | M9 — manual browser only |
 
 ---
 

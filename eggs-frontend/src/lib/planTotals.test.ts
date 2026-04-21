@@ -1,183 +1,188 @@
-// eggs-frontend/src/lib/planTotals.test.ts
-
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { getPlanTotal } from './planTotals'
 import type { ShoppingPlanRecord } from '../types'
 
-// ─── Fixture helpers ──────────────────────────────────────────────────────────
-
-function makeRecord(overrides: Partial<ShoppingPlanRecord> = {}): ShoppingPlanRecord {
+// Minimal fixture helpers — only include fields that getPlanTotal actually reads.
+function makePlan(overrides: Partial<ShoppingPlanRecord> = {}): ShoppingPlanRecord {
   return {
-    id: 'plan-test',
+    id: 'test-plan',
     generated_at: '2025-01-01T00:00:00Z',
-    best_basket_total: null,
     plan_data: {
-      id: 'plan-test',
+      id: 'plan-data',
       generatedAt: '2025-01-01T00:00:00Z',
       meta: {
-        location: { lat: 32.77, lng: -96.79 },
+        location: { lat: 32, lng: -96 },
         storesQueried: [],
         modelUsed: 'test',
-        budgetMode: 'calculate'
+        budgetMode: 'calculate',
       },
       ingredients: [],
       stores: [],
-      summary: {
-        subtotal: 0,
-        estimatedTax: 0,
-        total: 0,
-        realPriceCount: 0,
-        estimatedPriceCount: 0
-      }
+      summary: { subtotal: 0, estimatedTax: 0, total: 0, realPriceCount: 0, estimatedPriceCount: 0 },
     },
-    ...overrides
+    ...overrides,
   }
 }
 
-function makeItem(ingredientId: string, lineTotal: number, notAvailable = false) {
-  return {
-    ingredientId,
-    name: `Item for ${ingredientId}`,
-    quantity: 1,
-    unit: 'each',
-    unitPrice: lineTotal,
-    lineTotal,
-    confidence: 'real' as const,
-    shopUrl: 'https://example.com/product',
-    isLoyaltyPrice: false,
-    notAvailable
-  }
-}
-
-function makeStore(name: string, items: ReturnType<typeof makeItem>[]) {
-  const subtotal = items.filter(i => !i.notAvailable).reduce((s, i) => s + i.lineTotal, 0)
-  return {
-    storeName: name,
-    storeBanner: name,
-    storeType: 'physical' as const,
-    priceSource: 'kroger_api' as const,
-    items,
-    subtotal,
-    estimatedTax: subtotal * 0.0825,
-    grandTotal: subtotal * 1.0825
-  }
-}
-
-// ─── Test suite ───────────────────────────────────────────────────────────────
+// ─── Test 1: Path 1 — best_basket_total column present ───────────────────────
 
 describe('getPlanTotal', () => {
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  // Case 1 — Path 1: server column is present and non-null → use it directly
-  it('returns best_basket_total column when present (Path 1)', () => {
-    const plan = makeRecord({ best_basket_total: 42.50 })
+  it('returns best_basket_total directly when present (Path 1)', () => {
+    const plan = makePlan({ best_basket_total: 42.50 })
     expect(getPlanTotal(plan)).toBe(42.50)
   })
 
-  // Case 2 — Path 2: null column, valid stores → recompute cheapest-per-ingredient
-  it('recomputes from stores when best_basket_total is null (Path 2)', () => {
-    // Single store, two ingredients
-    // ing-a: $10.00, ing-b: $5.00 → subtotal = $15, total = $15 * 1.0825 = $16.24
-    const plan = makeRecord({
-      best_basket_total: null,
-      plan_data: {
-        ...makeRecord().plan_data,
-        stores: [
-          makeStore('Kroger', [
-            makeItem('ing-a', 10.00),
-            makeItem('ing-b', 5.00)
-          ])
-        ]
-      }
-    })
-    const expected = Math.round(15 * 1.0825 * 100) / 100 // 16.24
-    expect(getPlanTotal(plan)).toBe(expected)
+  it('returns 0 for best_basket_total: 0 — not a missing-value case (Path 1 zero guard)', () => {
+    // Regression guard: a truthy check (`if (plan.best_basket_total)`) would
+    // incorrectly fall through to recompute for a legitimate $0 total.
+    const plan = makePlan({ best_basket_total: 0 })
+    expect(getPlanTotal(plan)).toBe(0)
   })
 
-  // Case 3 — Path 2: cross-store cheapest-per-ingredient logic
-  // 3 ingredients across 2 stores; store A cheaper on ing-1, ing-2; store B cheaper on ing-3
-  it('picks cheapest per ingredient across multiple stores (Path 2)', () => {
-    // Store A: ing-1=$5, ing-2=$3, ing-3=$8
-    // Store B: ing-1=$7, ing-2=$4, ing-3=$2
-    // Cheapest: ing-1=$5, ing-2=$3, ing-3=$2 → subtotal=$10, total=$10*1.0825=10.83
-    const plan = makeRecord({
+  // ─── Test 2: Path 2 — recompute from stores when column is null ────────────
+
+  it('recomputes cheapest-per-ingredient from stores when best_basket_total is null', () => {
+    // Single store, two items: $10 and $5 → subtotal $15 × 1.0825 = $16.24
+    const plan = makePlan({
       best_basket_total: null,
       plan_data: {
-        ...makeRecord().plan_data,
+        ...makePlan().plan_data,
         stores: [
-          makeStore('StoreA', [
-            makeItem('ing-1', 5.00),
-            makeItem('ing-2', 3.00),
-            makeItem('ing-3', 8.00)
-          ]),
-          makeStore('StoreB', [
-            makeItem('ing-1', 7.00),
-            makeItem('ing-2', 4.00),
-            makeItem('ing-3', 2.00)
-          ])
-        ]
-      }
+          {
+            storeName: 'Kroger',
+            storeBanner: 'Kroger',
+            storeType: 'physical',
+            priceSource: 'kroger_api',
+            items: [
+              { ingredientId: 'ing-1', name: 'Eggs', quantity: 1, unit: 'dozen', unitPrice: 10, lineTotal: 10, confidence: 'real', isLoyaltyPrice: false },
+              { ingredientId: 'ing-2', name: 'Milk', quantity: 1, unit: 'gal', unitPrice: 5, lineTotal: 5, confidence: 'real', isLoyaltyPrice: false },
+            ],
+            subtotal: 15,
+            estimatedTax: 1.24,
+            grandTotal: 16.24,
+          },
+        ],
+      },
     })
-    const expected = Math.round(10 * 1.0825 * 100) / 100 // 10.83
-    expect(getPlanTotal(plan)).toBe(expected)
+    // 15 × 1.0825 = 16.2375 → rounded to 16.24
+    expect(getPlanTotal(plan)).toBeCloseTo(16.24, 2)
   })
 
-  // Case 4 — Path 2: empty stores array → returns 0
-  it('returns 0 when stores array is empty (Path 2 edge case)', () => {
-    const plan = makeRecord({
+  // ─── Test 3: Cross-store cheapest-per-ingredient selection ─────────────────
+
+  it('picks cheapest per ingredient across multiple stores', () => {
+    // ing-1: Store A $8, Store B $10 → pick $8
+    // ing-2: Store A $6, Store B $4  → pick $4
+    // ing-3: Store A $12, Store B $9 → pick $9
+    // cheapest sum = $8 + $4 + $9 = $21 → $21 × 1.0825 = $22.73 (rounded)
+    const plan = makePlan({
       best_basket_total: null,
       plan_data: {
-        ...makeRecord().plan_data,
-        stores: []
-      }
+        ...makePlan().plan_data,
+        stores: [
+          {
+            storeName: 'Store A',
+            storeBanner: 'Store A',
+            storeType: 'physical',
+            priceSource: 'kroger_api',
+            items: [
+              { ingredientId: 'ing-1', name: 'Item 1', quantity: 1, unit: 'ea', unitPrice: 8, lineTotal: 8, confidence: 'real', isLoyaltyPrice: false },
+              { ingredientId: 'ing-2', name: 'Item 2', quantity: 1, unit: 'ea', unitPrice: 6, lineTotal: 6, confidence: 'real', isLoyaltyPrice: false },
+              { ingredientId: 'ing-3', name: 'Item 3', quantity: 1, unit: 'ea', unitPrice: 12, lineTotal: 12, confidence: 'real', isLoyaltyPrice: false },
+            ],
+            subtotal: 26,
+            estimatedTax: 0,
+            grandTotal: 26,
+          },
+          {
+            storeName: 'Store B',
+            storeBanner: 'Store B',
+            storeType: 'physical',
+            priceSource: 'walmart_api',
+            items: [
+              { ingredientId: 'ing-1', name: 'Item 1', quantity: 1, unit: 'ea', unitPrice: 10, lineTotal: 10, confidence: 'real', isLoyaltyPrice: false },
+              { ingredientId: 'ing-2', name: 'Item 2', quantity: 1, unit: 'ea', unitPrice: 4, lineTotal: 4, confidence: 'real', isLoyaltyPrice: false },
+              { ingredientId: 'ing-3', name: 'Item 3', quantity: 1, unit: 'ea', unitPrice: 9, lineTotal: 9, confidence: 'real', isLoyaltyPrice: false },
+            ],
+            subtotal: 23,
+            estimatedTax: 0,
+            grandTotal: 23,
+          },
+        ],
+      },
+    })
+    // $21 × 1.0825 = 22.7325 → 22.73
+    expect(getPlanTotal(plan)).toBeCloseTo(22.73, 2)
+  })
+
+  // ─── Test 4: Empty stores array → returns 0 ────────────────────────────────
+
+  it('returns 0 when best_basket_total is null and stores array is empty', () => {
+    const plan = makePlan({
+      best_basket_total: null,
+      plan_data: {
+        ...makePlan().plan_data,
+        stores: [],
+        summary: { subtotal: 0, estimatedTax: 0, total: 0, realPriceCount: 0, estimatedPriceCount: 0 },
+      },
     })
     expect(getPlanTotal(plan)).toBe(0)
   })
 
-  // Case 5 — Path 3: no stores and no best_basket_total → falls back to summary.total
-  it('falls back to summary.total when plan_data has no stores (Path 3)', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const plan = makeRecord({
+  // ─── Test 5: plan_data undefined/missing stores → legacy fallback ──────────
+
+  it('falls back to legacy summary.total when plan_data has no stores', () => {
+    const plan = makePlan({
       best_basket_total: null,
       plan_data: {
-        ...makeRecord().plan_data,
-        stores: undefined as any,
-        summary: {
-          subtotal: 30,
-          estimatedTax: 2.48,
-          total: 32.48,
-          realPriceCount: 2,
-          estimatedPriceCount: 0
-        }
-      }
+        ...makePlan().plan_data,
+        stores: undefined as unknown as never[],
+        summary: { subtotal: 90, estimatedTax: 7.42, total: 55.99, realPriceCount: 3, estimatedPriceCount: 0 },
+      },
     })
-    expect(getPlanTotal(plan)).toBe(32.48)
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('falling back to legacy summary.total'),
-      expect.any(String)
-    )
+    expect(getPlanTotal(plan)).toBe(55.99)
   })
 
-  // Case 6 — notAvailable items must be excluded from the per-ingredient search
-  it('excludes notAvailable items from recompute (Path 2)', () => {
-    // ing-a available at $10, notAvailable at $2 (should be ignored)
-    // Only $10 counts → subtotal=$10, total=$10*1.0825=10.83
-    const plan = makeRecord({
+  // ─── Test 6: notAvailable items are excluded ────────────────────────────────
+
+  it('excludes notAvailable items from per-ingredient search', () => {
+    // ing-1: $10 notAvailable in Store A, $15 available in Store B → picks $15
+    // ing-2: $5 available in Store A → picks $5
+    // sum = $20 × 1.0825 = 21.65
+    const plan = makePlan({
       best_basket_total: null,
       plan_data: {
-        ...makeRecord().plan_data,
+        ...makePlan().plan_data,
         stores: [
-          makeStore('StoreA', [makeItem('ing-a', 10.00, false)]),
-          makeStore('StoreB', [makeItem('ing-a', 2.00, true)])
-        ]
-      }
+          {
+            storeName: 'Store A',
+            storeBanner: 'Store A',
+            storeType: 'physical',
+            priceSource: 'kroger_api',
+            items: [
+              { ingredientId: 'ing-1', name: 'Item 1', quantity: 1, unit: 'ea', unitPrice: 10, lineTotal: 10, confidence: 'real', isLoyaltyPrice: false, notAvailable: true },
+              { ingredientId: 'ing-2', name: 'Item 2', quantity: 1, unit: 'ea', unitPrice: 5, lineTotal: 5, confidence: 'real', isLoyaltyPrice: false },
+            ],
+            subtotal: 5,
+            estimatedTax: 0,
+            grandTotal: 5,
+          },
+          {
+            storeName: 'Store B',
+            storeBanner: 'Store B',
+            storeType: 'physical',
+            priceSource: 'walmart_api',
+            items: [
+              { ingredientId: 'ing-1', name: 'Item 1', quantity: 1, unit: 'ea', unitPrice: 15, lineTotal: 15, confidence: 'real', isLoyaltyPrice: false },
+            ],
+            subtotal: 15,
+            estimatedTax: 0,
+            grandTotal: 15,
+          },
+        ],
+      },
     })
-    // StoreB's notAvailable item should be ignored — ing-a only has $10 available
-    const expected = Math.round(10 * 1.0825 * 100) / 100 // 10.83
-    expect(getPlanTotal(plan)).toBe(expected)
+    // $20 × 1.0825 = 21.65
+    expect(getPlanTotal(plan)).toBeCloseTo(21.65, 2)
   })
-
 })

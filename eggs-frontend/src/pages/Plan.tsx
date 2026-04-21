@@ -9,7 +9,7 @@ import PlanResult from '../components/PlanResult'
 import SettingsPanel from '../components/SettingsPanel'
 import { clarifyIngredients, generatePlan, ApiError } from '../lib/api'
 import { saveToHistory } from '../services/storageService'
-import type { ShoppingPlan, PlanSettings, ClarificationRequest, IngredientLine } from '../types'
+import type { ShoppingPlan, PlanSettings, ClarificationRequest, IngredientLine, ShoppableItemSpecMirror } from '../types'
 
 // Convert chef's raw shopping items into IngredientLine format for the API
 function itemsToIngredients(items: ShoppingItem[]): IngredientLine[] {
@@ -51,6 +51,7 @@ export default function Plan() {
   const [items, setItems] = useState<ShoppingItem[]>([])
   const [settings, setSettings] = useState<PlanSettings>(DEFAULT_SETTINGS)
   const [clarifications, setClarifications] = useState<ClarificationRequest[] | null>(null)
+  const [resolvedSpecs, setResolvedSpecs] = useState<ShoppableItemSpecMirror[] | undefined>(undefined)
   const [plan, setPlan] = useState<ShoppingPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [limitReached, setLimitReached] = useState(false)
@@ -66,11 +67,17 @@ export default function Plan() {
       const ingredients = itemsToIngredients(items)
       const result = await clarifyIngredients(token, ingredients)
 
+      // Capture any specs the clarify route already resolved (M6+)
+      const specsFromClarify = result.specs
+        ? (Object.values(result.specs) as ShoppableItemSpecMirror[])
+        : undefined
+
       if (result.clarifications && result.clarifications.length > 0) {
+        setResolvedSpecs(specsFromClarify)
         setClarifications(result.clarifications)
         setStatus('clarifying')
       } else {
-        await runPlan(ingredients, token)
+        await runPlan(ingredients, token, specsFromClarify)
       }
     } catch (e) {
       setError('An error occurred while analyzing your list.')
@@ -87,10 +94,10 @@ export default function Plan() {
 
     const token = await getToken()
     if (!token) return
-    await runPlan(itemsToIngredients(updatedItems), token)
+    await runPlan(itemsToIngredients(updatedItems), token, resolvedSpecs)
   }
 
-  const runPlan = async (ingredients: IngredientLine[], token: string) => {
+  const runPlan = async (ingredients: IngredientLine[], token: string, specs?: ShoppableItemSpecMirror[]) => {
     saveToHistory(items)
 
     // Phase 1: Geolocate + show store discovery state
@@ -118,7 +125,8 @@ export default function Plan() {
       const result = await generatePlan(token, {
         ingredients,
         location: { lat, lng },
-        settings
+        settings,
+        ...(specs && specs.length > 0 ? { resolvedSpecs: specs } : {})
       })
       clearTimeout(optimizingTimer)
       setPlan(result)
@@ -141,6 +149,7 @@ export default function Plan() {
     setError(null)
     setLimitReached(false)
     setClarifications(null)
+    setResolvedSpecs(undefined)
   }
 
   return (

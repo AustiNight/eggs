@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
-import { ChevronLeft, ExternalLink, ShoppingCart, AlertTriangle, CheckCircle } from 'lucide-react'
-import { getEvent, scaleRecipes, clarifyIngredients, generatePlan, updateEvent } from '../lib/api'
+import { ChevronLeft, AlertTriangle, CheckCircle } from 'lucide-react'
+import { getEvent, scaleRecipes, clarifyIngredients, generatePlan } from '../lib/api'
+import PlanResult from '../components/PlanResult'
 import type {
-  ShoppingPlan, StorePlan, StoreItem, IngredientLine,
-  ClarificationRequest, PlanSettings, ShopStatus, Confidence
+  ShoppingPlan, IngredientLine,
+  ClarificationRequest, PlanSettings, ShopStatus, Confidence,
+  ShoppableItemSpecMirror
 } from '../types'
 
 // ─── Source badge ─────────────────────────────────────────────────────────────
@@ -141,148 +143,6 @@ function ClarificationModal({
   )
 }
 
-// ─── Results ──────────────────────────────────────────────────────────────────
-
-function StoreCard({ store }: { store: StorePlan }) {
-  const [expanded, setExpanded] = useState(true)
-  return (
-    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #334155' }}>
-      <button
-        onClick={() => setExpanded(p => !p)}
-        className="w-full px-4 py-4 flex items-center justify-between text-left"
-        style={{ backgroundColor: '#1e293b' }}
-      >
-        <div>
-          <div className="font-semibold text-white">{store.storeName}</div>
-          <div className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>
-            {store.storeAddress}
-            {store.distanceMiles ? ` · ${store.distanceMiles.toFixed(1)} mi` : ''}
-            {' · '}
-            <span style={{ color: store.priceSource === 'kroger_api' ? '#22c55e' : '#fbbf24' }}>
-              {store.priceSource === 'kroger_api' ? 'Live prices' : 'AI estimated'}
-            </span>
-          </div>
-        </div>
-        <div className="text-right ml-4">
-          <div className="font-bold text-white">${store.grandTotal.toFixed(2)}</div>
-          <div className="text-xs" style={{ color: '#94a3b8' }}>{store.items.length} items</div>
-        </div>
-      </button>
-
-      {expanded && (
-        <div style={{ borderTop: '1px solid #334155' }}>
-          {store.items.map((item, i) => (
-            <div
-              key={item.ingredientId + i}
-              className="px-4 py-3 flex items-start justify-between gap-3"
-              style={{
-                backgroundColor: '#0f172a',
-                borderBottom: i < store.items.length - 1 ? '1px solid #334155' : 'none'
-              }}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-white">{item.name}</div>
-                <div className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>
-                  {item.quantity} {item.unit}
-                  {item.isLoyaltyPrice && item.nonMemberPrice && (
-                    <span className="ml-2 line-through">${item.nonMemberPrice.toFixed(2)}</span>
-                  )}
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-2">
-                  <ConfidenceBadge confidence={item.confidence} proofUrl={item.proofUrl} />
-                  {item.confidence === 'real' && item.productUrl && (
-                    <a
-                      href={item.productUrl} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs"
-                      style={{ color: '#60a5fa' }}
-                    >
-                      <ShoppingCart className="w-3 h-3" /> Shop Link
-                    </a>
-                  )}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-semibold text-white text-sm">${item.lineTotal.toFixed(2)}</div>
-                <div className="text-xs" style={{ color: '#94a3b8' }}>${item.unitPrice.toFixed(2)} ea</div>
-              </div>
-            </div>
-          ))}
-          <div className="px-4 py-3 flex items-center justify-between" style={{ backgroundColor: '#1e293b' }}>
-            <span className="text-xs" style={{ color: '#94a3b8' }}>Subtotal · Tax (est. 8.25%)</span>
-            <span className="text-sm font-medium text-white">${store.subtotal.toFixed(2)} · ${store.estimatedTax.toFixed(2)}</span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function PlanResults({
-  plan,
-  onReset,
-  eventId,
-  getToken
-}: {
-  plan: ShoppingPlan
-  onReset: () => void
-  eventId?: string
-  getToken: () => Promise<string | null>
-}) {
-  const navigate = useNavigate()
-  const { realPriceCount, estimatedPriceCount, total } = plan.summary
-
-  return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-      {/* Summary */}
-      <div className="rounded-xl p-5" style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}>
-        <div className="flex items-end justify-between mb-4">
-          <div>
-            <div className="text-3xl font-bold text-white">${total.toFixed(2)}</div>
-            <div className="text-xs mt-0.5" style={{ color: '#94a3b8' }}>estimated total with tax</div>
-          </div>
-          {plan.meta.budgetExceeded && (
-            <span className="text-xs font-semibold px-2 py-1 rounded-full"
-              style={{ color: '#ef4444', backgroundColor: '#ef444420' }}>
-              Over Budget
-            </span>
-          )}
-        </div>
-        <div className="flex gap-4 text-xs" style={{ color: '#94a3b8' }}>
-          <span>{plan.stores.length} store{plan.stores.length !== 1 ? 's' : ''}</span>
-          <span style={{ color: '#22c55e' }}>{realPriceCount} live prices</span>
-          {estimatedPriceCount > 0 && <span style={{ color: '#fbbf24' }}>{estimatedPriceCount} estimated</span>}
-        </div>
-      </div>
-
-      {plan.stores.map((store, i) => <StoreCard key={store.storeName + i} store={store} />)}
-
-      <div className="flex gap-3 pt-2">
-        {eventId && (
-          <button
-            onClick={async () => {
-              const token = await getToken()
-              if (!token) return
-              await updateEvent(token, eventId, { status: 'reconcile_needed' })
-              navigate(`/events/${eventId}`)
-            }}
-            className="flex-1 py-3 rounded-xl font-semibold text-sm"
-            style={{ backgroundColor: '#fbbf24', color: '#0f172a', boxShadow: '0 0 18px rgba(251,191,36,0.45)' }}
-          >
-            Mark Shopping Complete →
-          </button>
-        )}
-        <button
-          onClick={onReset}
-          className="py-3 px-4 rounded-xl text-sm font-medium"
-          style={{ backgroundColor: '#1e293b', color: '#94a3b8', border: '1px solid #334155' }}
-        >
-          Regenerate
-        </button>
-      </div>
-    </div>
-  )
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function EventShop() {
@@ -300,6 +160,7 @@ export default function EventShop() {
   const [eventName, setEventName] = useState<string>()
   const [ingredients, setIngredients] = useState<IngredientLine[]>([])
   const [clarifications, setClarifications] = useState<ClarificationRequest[] | null>(null)
+  const [pendingSpecs, setPendingSpecs] = useState<ShoppableItemSpecMirror[] | undefined>(undefined)
   const [plan, setPlan] = useState<ShoppingPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -314,7 +175,8 @@ export default function EventShop() {
 
   const runPipeline = useCallback(async (
     ingredientsList?: IngredientLine[],
-    resolvedClarifications?: Record<string, string>
+    resolvedClarifications?: Record<string, string>,
+    specs?: ShoppableItemSpecMirror[]
   ) => {
     if (!id) return
     const token = await getToken()
@@ -351,7 +213,8 @@ export default function EventShop() {
         },
         eventId: id,
         eventName,
-        headcount: locationState?.headcount
+        headcount: locationState?.headcount,
+        ...(specs && specs.length > 0 ? { resolvedSpecs: specs } : {})
       })
 
       setPlan(result)
@@ -401,15 +264,21 @@ export default function EventShop() {
         const clarifyResult = await clarifyIngredients(token, scaleResult.ingredients)
         if (cancelled) return
 
+        // Capture any pre-resolved specs (M6+)
+        const specsFromClarify = clarifyResult.specs
+          ? (Object.values(clarifyResult.specs) as ShoppableItemSpecMirror[])
+          : undefined
+
         if (clarifyResult.clarifications && clarifyResult.clarifications.length > 0) {
+          setPendingSpecs(specsFromClarify)
           setClarifications(clarifyResult.clarifications)
           setShopStatus('clarifying')
           // Wait for user to answer — runPipeline called from ClarificationModal onComplete
           return
         }
 
-        // No clarifications needed — pass ingredients directly to avoid stale closure
-        await runPipeline(scaleResult.ingredients)
+        // No clarifications needed — pass ingredients + specs to avoid stale closure
+        await runPipeline(scaleResult.ingredients, undefined, specsFromClarify)
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Something went wrong')
@@ -424,12 +293,13 @@ export default function EventShop() {
 
   const handleClarificationComplete = (resolved: Record<string, string>) => {
     setClarifications(null)
-    runPipeline(undefined, resolved)
+    runPipeline(undefined, resolved, pendingSpecs)
   }
 
   const handleReset = () => {
     setShopStatus('idle')
     setClarifications(null)
+    setPendingSpecs(undefined)
     setPlan(null)
     setError(null)
     setIngredients([])
@@ -473,7 +343,7 @@ export default function EventShop() {
       )}
 
       {shopStatus === 'results' && plan && (
-        <PlanResults plan={plan} onReset={handleReset} eventId={id} getToken={getToken} />
+        <PlanResult plan={plan} onReset={handleReset} eventId={id} getToken={getToken} />
       )}
     </div>
   )

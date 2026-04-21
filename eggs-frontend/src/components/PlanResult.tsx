@@ -1,112 +1,100 @@
-import React from 'react'
-import { ShoppingPlan, StorePlan, StoreItem } from '../types'
-import { ShoppingCart, Car, DollarSign, ArrowRight, Activity, Globe, Tag, ExternalLink, FileText, AlertCircle } from 'lucide-react'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
+/**
+ * PlanResult — top-level results component.
+ *
+ * Routing:
+ *   - plan.winners populated (SHOPPING_V2 plan) → new best-basket primary view
+ *   - plan.winners absent/empty (legacy plan)   → LegacyPlanView (unchanged)
+ *
+ * State management for winner overrides lives here, initialised from plan.winners.
+ * The displayed total is computed from overrides + plan.winners, not from plan.summary.
+ */
+import React, { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Globe, Activity, DollarSign, ArrowRight } from 'lucide-react'
+import type { ShoppingPlan, WinnerResult, Candidate } from '../types'
+import { updateEvent } from '../lib/api'
+import { TAX_RATE, round2, computeDisplayedTotal } from '../lib/planTotalsView'
+import LegacyPlanView from './LegacyPlanView'
+import BestBasketList from './BestBasketList'
+import PerStorePanels from './PerStorePanels'
 
 interface PlanResultProps {
   plan: ShoppingPlan
   onReset: () => void
+  /** Present when rendered from an event flow — enables "Mark Shopping Complete" button. */
+  eventId?: string
+  getToken?: () => Promise<string | null>
 }
 
-const COLORS = ['#fbbf24', '#f97316', '#34d399', '#60a5fa', '#a78bfa']
+// ─── Mark Shopping Complete button ────────────────────────────────────────────
 
-const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
-  real:                   { label: 'Live',      color: '#34d399' },
-  estimated_with_source:  { label: 'Sourced',   color: '#fbbf24' },
-  estimated:              { label: 'Est.',       color: '#94a3b8' }
+interface MarkShoppingCompleteButtonProps {
+  eventId?: string
+  getToken?: () => Promise<string | null>
 }
 
-function ConfidenceBadge({ confidence }: { confidence: string }) {
-  const { label, color } = SOURCE_LABELS[confidence] ?? SOURCE_LABELS.estimated
+function MarkShoppingCompleteButton({ eventId, getToken }: MarkShoppingCompleteButtonProps) {
+  const navigate = useNavigate()
+
+  if (!eventId || !getToken) return null
+
   return (
-    <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded"
-      style={{ color, backgroundColor: `${color}18`, border: `1px solid ${color}30` }}>
-      {label}
-    </span>
+    <button
+      onClick={async () => {
+        const token = await getToken()
+        if (!token) return
+        await updateEvent(token, eventId, { status: 'reconcile_needed' })
+        navigate(`/events/${eventId}`)
+      }}
+      className="w-full py-3 rounded-xl font-semibold text-sm"
+      style={{ backgroundColor: '#fbbf24', color: '#0f172a', boxShadow: '0 0 18px rgba(251,191,36,0.45)' }}
+    >
+      Mark Shopping Complete →
+    </button>
   )
 }
 
-function ItemRow({ item }: { item: StoreItem }) {
-  if (item.notAvailable) {
-    return (
-      <tr className="opacity-40">
-        <td className="py-2.5 text-slate-400 italic">
-          <div className="flex items-center gap-1.5">
-            <AlertCircle className="w-3 h-3 text-slate-600 shrink-0" />
-            <span>{item.name}</span>
-          </div>
-        </td>
-        <td className="py-2.5 text-center text-slate-600 text-xs">—</td>
-        <td className="py-2.5 text-right text-slate-600 text-xs">Not carried</td>
-        <td className="py-2.5 text-center text-slate-600 text-xs">—</td>
-        <td className="py-2.5 text-right text-slate-600 text-xs">—</td>
-        <td className="py-2.5 text-right text-slate-600 text-xs">—</td>
-      </tr>
-    )
-  }
+// ─── Best-basket view ─────────────────────────────────────────────────────────
 
-  return (
-    <tr className="group">
-      <td className="py-3 text-slate-300 group-hover:text-white transition-colors">
-        <div className="flex flex-col gap-1">
-          <span className="font-medium">{item.name}</span>
-          {item.isLoyaltyPrice && (
-            <span className="inline-flex w-fit items-center gap-1 text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30">
-              <Tag className="w-3 h-3" /> Member Price
-              {item.nonMemberPrice && item.nonMemberPrice > item.unitPrice && (
-                <span className="line-through text-slate-600 ml-1">${item.nonMemberPrice.toFixed(2)}</span>
-              )}
-            </span>
-          )}
-        </div>
-      </td>
-      <td className="py-3 text-center text-slate-400">
-        {item.quantity} <span className="text-slate-600 text-xs">{item.unit}</span>
-      </td>
-      <td className="py-3 text-right font-mono text-amber-400/90 font-bold">
-        ${item.unitPrice.toFixed(2)}
-      </td>
-      <td className="py-3 text-center">
-        <ConfidenceBadge confidence={item.confidence} />
-      </td>
-      <td className="py-3 text-right">
-        {(() => {
-          const href = item.shopUrl ?? item.productUrl
-          return href
-            ? <a href={href} target="_blank" rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline">
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            : <span className="text-xs text-slate-700">—</span>
-        })()}
-      </td>
-      <td className="py-3 text-right">
-        {item.proofUrl
-          ? <a href={item.proofUrl} target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded text-xs text-slate-300 transition-colors">
-              <FileText className="w-3 h-3" />
-            </a>
-          : <span className="text-xs text-slate-700">—</span>}
-      </td>
-    </tr>
-  )
+interface BestBasketViewProps {
+  plan: ShoppingPlan
+  winners: WinnerResult[]
+  onReset: () => void
+  eventId?: string
+  getToken?: () => Promise<string | null>
 }
 
-const PlanResult: React.FC<PlanResultProps> = ({ plan, onReset }) => {
-  const data = plan.stores.map(s => ({ name: s.storeName, value: s.subtotal }))
-  const handleShopAll = (store: StorePlan) => {
-    store.items.forEach(item => {
-      if (item.notAvailable) return
-      const href = item.shopUrl ?? item.productUrl
-      if (href) window.open(href, '_blank')
+function BestBasketView({ plan, winners, onReset, eventId, getToken }: BestBasketViewProps) {
+  // winnerOverrides: spec.id → user-selected Candidate (overrides the server winner).
+  // Key is deleted (not set to null) when the user swaps back to the original winner.
+  const [winnerOverrides, setWinnerOverrides] = useState<Record<string, Candidate>>({})
+
+  const handleSwap = (specId: string, candidate: Candidate) => {
+    const winnerResult = winners.find(w => w.spec.id === specId)
+    const isOriginalWinner = winnerResult?.winner && candidate === winnerResult.winner
+    setWinnerOverrides((prev) => {
+      const next = { ...prev }
+      if (isOriginalWinner) {
+        delete next[specId]
+      } else {
+        next[specId] = candidate
+      }
+      return next
     })
   }
-  const total = plan.summary.total
+
+  // Compute displayed total from current overrides
+  const displayedTotal = useMemo(
+    () => computeDisplayedTotal(winners, winnerOverrides),
+    [winnerOverrides, winners]
+  )
+
   const savings = plan.summary.estimatedSavings ?? 0
 
   return (
-    <div className="space-y-8 pb-20 animate-slideUp">
+    <div className="space-y-6 pb-20 animate-slideUp">
 
+      {/* Stats bar */}
       <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 flex flex-wrap gap-6 items-center justify-center text-sm text-slate-300">
         <div className="flex items-center gap-2">
           <Globe className="w-4 h-4 text-blue-400" />
@@ -117,181 +105,143 @@ const PlanResult: React.FC<PlanResultProps> = ({ plan, onReset }) => {
           <Activity className="w-4 h-4 text-emerald-400" />
           <span>
             <strong className="text-white">{plan.summary.realPriceCount}</strong> live prices
-            {plan.summary.estimatedPriceCount > 0 && <> · <strong className="text-amber-400">{plan.summary.estimatedPriceCount}</strong> estimated</>}
+            {plan.summary.estimatedPriceCount > 0 && (
+              <> · <strong className="text-amber-400">{plan.summary.estimatedPriceCount}</strong> estimated</>
+            )}
           </span>
         </div>
       </div>
 
+      {/* Hero total */}
       <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 relative z-10">
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-white mb-3">Shopping Plan Ready</h2>
+            <h2 className="text-2xl font-bold text-white mb-1">Best Basket</h2>
+            <p className="text-slate-400 text-sm">
+              Lowest-cost combination across all searched stores.
+              {Object.keys(winnerOverrides).length > 0 && (
+                <> · <span className="text-amber-400">{Object.keys(winnerOverrides).length} item{Object.keys(winnerOverrides).length !== 1 ? 's' : ''} swapped</span></>
+              )}
+            </p>
             {plan.summary.narrative && (
-              <p className="text-slate-300 text-sm leading-relaxed max-w-xl">{plan.summary.narrative}</p>
+              <p className="text-slate-400 text-xs mt-2 leading-relaxed max-w-xl">{plan.summary.narrative}</p>
             )}
           </div>
           <div className="flex items-end flex-col min-w-[140px] shrink-0">
-            {savings > 0 && <span className="text-sm text-emerald-400 font-mono mb-1">Savings: ${savings.toFixed(2)}</span>}
-            <div className="text-4xl font-bold text-white tracking-tighter">${total.toFixed(2)}</div>
+            {savings > 0 && (
+              <span className="text-sm text-emerald-400 font-mono mb-1">Savings: ${savings.toFixed(2)}</span>
+            )}
+            <div className="text-4xl font-bold text-white tracking-tighter">${displayedTotal.toFixed(2)}</div>
             <span className="text-xs text-slate-500 uppercase tracking-widest mt-1">Total w/ Tax</span>
-            <span className="text-[10px] text-slate-600">Subtotal: ${plan.summary.subtotal.toFixed(2)}</span>
+            <span className="text-[10px] text-slate-600">
+              Subtotal: ${round2(displayedTotal / (1 + TAX_RATE)).toFixed(2)}
+            </span>
             {plan.meta.budgetExceeded && (
-              <span className="mt-2 text-xs font-semibold px-2 py-1 rounded-full text-red-400 bg-red-400/10 border border-red-400/20">Over Budget</span>
+              <span className="mt-2 text-xs font-semibold px-2 py-1 rounded-full text-red-400 bg-red-400/10 border border-red-400/20">
+                Over Budget
+              </span>
             )}
           </div>
         </div>
+        {plan.instacartUrl && (
+          <div className="mt-4 relative z-10">
+            <a
+              href={plan.instacartUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#43B02A] px-4 py-2 text-sm font-medium text-white hover:bg-[#3a9a24] transition"
+            >
+              Shop this list on Instacart
+            </a>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-amber-400" /> Your Carts
-          </h3>
-          {plan.stores.map((store, idx) => (
-            <div key={idx} className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-md hover:border-slate-600 transition-colors">
-              <div className="p-4 bg-slate-800/80 border-b border-slate-700 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-amber-400 text-lg">{idx + 1}</div>
-                  <div>
-                    <h4 className="font-bold text-white">{store.storeName}</h4>
-                    <div className="flex items-center gap-2 text-xs text-slate-400">
-                      {store.storeType === 'physical' ? <Car className="w-3 h-3" /> : <ShoppingCart className="w-3 h-3" />}
-                      <span>{store.storeType}</span>
-                      {store.distanceMiles != null && <span>· {store.distanceMiles.toFixed(1)} mi</span>}
-                      <span className={store.priceSource === 'ai_estimated' ? 'text-amber-400' : 'text-emerald-400'}>
-                        · {store.priceSource === 'kroger_api' ? 'Live API'
-                          : store.priceSource === 'walmart_api' ? 'Live API'
-                          : 'AI search'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="block font-bold text-white text-lg">${store.grandTotal.toFixed(2)}</span>
-                  <span className="text-xs text-slate-500">Includes est. tax</span>
-                </div>
-              </div>
-              <div className="p-4 bg-slate-900/50">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-slate-500 border-b border-slate-800 text-xs uppercase tracking-wide">
-                      <th className="pb-2 font-medium">Item</th>
-                      <th className="pb-2 font-medium text-center w-16">Qty</th>
-                      <th className="pb-2 font-medium text-right w-24">Unit Price</th>
-                      <th className="pb-2 font-medium text-center w-20">Source</th>
-                      <th className="pb-2 font-medium text-right w-20">Shop</th>
-                      <th className="pb-2 font-medium text-right w-20">Proof</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {store.items.map((item, i) => (
-                      <ItemRow key={i} item={item} />
-                    ))}
-                  </tbody>
-                  <tfoot className="border-t border-slate-700/50">
-                    <tr>
-                      <td colSpan={5} className="pt-3 text-right text-xs text-slate-500">Subtotal</td>
-                      <td className="pt-3 text-right text-xs text-slate-500 font-mono">${store.subtotal.toFixed(2)}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={5} className="pt-1 text-right text-xs text-slate-500">Est. Tax (8.25%)</td>
-                      <td className="pt-1 text-right text-xs text-slate-500 font-mono">${store.estimatedTax.toFixed(2)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-              <div className="p-4 bg-slate-800 flex flex-col items-end gap-2 border-t border-slate-700">
-                <button onClick={() => handleShopAll(store)} className="flex items-center gap-2 text-sm font-bold bg-amber-400 hover:bg-amber-300 text-slate-900 px-4 py-2 rounded-lg transition-all hover:scale-105 active:scale-95">
-                  <ExternalLink className="w-4 h-4" /> Shop All Items at Retailer
-                </button>
-                <span className="text-[10px] text-slate-500 max-w-xs text-right italic">Opens each item in tabs so you can add to cart and checkout.</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="space-y-6">
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-emerald-400" /> Cost Breakdown
-          </h3>
-          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-            <div className="w-full h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
-                    {data.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }}
-                    itemStyle={{ color: '#fff' }}
-                    formatter={(value: number) => `$${value.toFixed(2)}`}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-3 space-y-1">
-              {data.map((entry, i) => (
-                <div key={i} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                    <span className="text-slate-400 truncate">{entry.name}</span>
-                  </div>
-                  <span className="text-slate-300 font-mono ml-2">${entry.value.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
-            <div className="text-xs text-slate-500 mt-3 text-center">Spend per store</div>
-          </div>
-          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-            <h4 className="text-sm font-semibold text-slate-300 mb-4">E.G.G.S. Strategy Report</h4>
-            <ul className="space-y-3 text-sm text-slate-400">
-              <li className="flex items-start gap-2">
-                <ArrowRight className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
-                <span>Visited {plan.stores.length} distinct location{plan.stores.length !== 1 ? 's' : ''}.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <ArrowRight className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
-                <span>Prioritized lowest price. No artificial merging.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <ArrowRight className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
-                <span>
-                  {(() => {
-                    const apiSources = plan.meta.storesQueried
-                      .filter(s => s.source !== 'ai_estimated')
-                      .map(s => {
-                        if (s.source === 'kroger_api') return 'Kroger'
-                        if (s.source === 'walmart_api') return 'Walmart'
-                        return s.source.replace('_api', '')
-                      })
-                    const apiList = [...new Set(apiSources)].join(' + ')
-                    const source = apiList || 'direct APIs'
-                    return `${plan.summary.realPriceCount} live price${plan.summary.realPriceCount !== 1 ? 's' : ''} from ${source}.`
-                  })()}
-                  {plan.summary.estimatedPriceCount > 0 && ` ${plan.summary.estimatedPriceCount} AI estimated.`}
-                </span>
-              </li>
-              {plan.meta.budgetMode === 'ceiling' && plan.meta.budgetCeiling && (
-                <li className="flex items-start gap-2">
-                  <ArrowRight className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
-                  <span>
-                    Budget ceiling: ${plan.meta.budgetCeiling.toFixed(2)}.{' '}
-                    {plan.meta.budgetExceeded
-                      ? <span className="text-red-400">Plan exceeded budget.</span>
-                      : <span className="text-emerald-400">Came in under budget.</span>}
-                  </span>
-                </li>
-              )}
-            </ul>
-          </div>
-          <button onClick={onReset} className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold transition-colors border border-slate-600">
-            Start New List
-          </button>
-        </div>
+      {/* Best basket list */}
+      <div>
+        <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
+          <DollarSign className="w-4 h-4 text-amber-400" />
+          Item-by-item winners
+          <span className="text-xs text-slate-500 font-normal ml-1">— tap Swap to choose a different source</span>
+        </h3>
+        <BestBasketList
+          winners={winners}
+          winnerOverrides={winnerOverrides}
+          onSwap={handleSwap}
+        />
       </div>
+
+      {/* Strategy report */}
+      <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
+        <h4 className="text-sm font-semibold text-slate-300 mb-3">E.G.G.S. Strategy Report</h4>
+        <ul className="space-y-2.5 text-sm text-slate-400">
+          <li className="flex items-start gap-2">
+            <ArrowRight className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+            <span>Visited {plan.stores.length} distinct location{plan.stores.length !== 1 ? 's' : ''}.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <ArrowRight className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+            <span>Best basket picks the cheapest per-item winner across all stores, respecting your brand preferences.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <ArrowRight className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+            <span>
+              {(() => {
+                const apiSources = plan.meta.storesQueried
+                  .filter(s => s.source !== 'ai_estimated')
+                  .map(s => {
+                    if (s.source === 'kroger_api') return 'Kroger'
+                    if (s.source === 'walmart_api') return 'Walmart'
+                    return s.source.replace('_api', '')
+                  })
+                const apiList = [...new Set(apiSources)].join(' + ')
+                const source = apiList || 'direct APIs'
+                return `${plan.summary.realPriceCount} live price${plan.summary.realPriceCount !== 1 ? 's' : ''} from ${source}.`
+              })()}
+              {plan.summary.estimatedPriceCount > 0 && ` ${plan.summary.estimatedPriceCount} AI estimated.`}
+            </span>
+          </li>
+          {plan.meta.budgetMode === 'ceiling' && plan.meta.budgetCeiling && (
+            <li className="flex items-start gap-2">
+              <ArrowRight className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+              <span>
+                Budget ceiling: ${plan.meta.budgetCeiling.toFixed(2)}.{' '}
+                {plan.meta.budgetExceeded
+                  ? <span className="text-red-400">Plan exceeded budget.</span>
+                  : <span className="text-emerald-400">Came in under budget.</span>}
+              </span>
+            </li>
+          )}
+        </ul>
+      </div>
+
+      {/* Per-store panels (collapsible) */}
+      <PerStorePanels stores={plan.stores} />
+
+      <MarkShoppingCompleteButton eventId={eventId} getToken={getToken} />
+
+      <button
+        onClick={onReset}
+        className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold transition-colors border border-slate-600"
+      >
+        Start New List
+      </button>
     </div>
   )
+}
+
+// ─── Top-level conditional ────────────────────────────────────────────────────
+
+const PlanResult: React.FC<PlanResultProps> = ({ plan, onReset, eventId, getToken }) => {
+  const winners = plan.winners
+
+  if (winners && winners.length > 0) {
+    return <BestBasketView plan={plan} winners={winners} onReset={onReset} eventId={eventId} getToken={getToken} />
+  }
+
+  // Legacy path — SHOPPING_V2 off or old plan without winners
+  return <LegacyPlanView plan={plan} onReset={onReset} eventId={eventId} getToken={getToken} />
 }
 
 export default PlanResult

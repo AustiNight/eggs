@@ -6,8 +6,15 @@ import type {
   StorePlan,
   StoreItem,
   IngredientLine,
-  KrogerLocation
+  KrogerLocation,
+  CanonicalUnit,
+  UserProfile
 } from '../types/index.js'
+import { CANONICAL_UNITS, validateSpecInput } from '../types/spec.js'
+import type { ShoppableItemSpec } from '../types/spec.js'
+import { computeBestBasketTotal, extractSpecs } from '../lib/planTotals.js'
+import { selectWinner } from '../lib/bestValue.js'
+import type { WinnerResult } from '../lib/bestValue.js'
 import { getSupabase } from '../db/client.js'
 import { requireAuthOrServiceKey } from '../middleware/auth.js'
 import { enforceFreeLimit } from '../middleware/limits.js'
@@ -15,8 +22,10 @@ import { rateLimit } from '../middleware/ratelimit.js'
 import { getProvider, type AnthropicTool } from '../providers/index.js'
 import { KrogerClient } from '../integrations/kroger.js'
 import { WalmartClient } from '../integrations/walmart.js'
+import { IdpClient } from '../integrations/instacart-idp.js'
 import { getShopUrl, normalizeBanner } from '../integrations/store-urls.js'
 import { validateUrls } from '../lib/url-validator.js'
+import type { StoreSearchResult } from '../integrations/StoreAdapter.js'
 
 const plan = new Hono<HonoEnv>()
 
@@ -57,23 +66,13 @@ async function searchKroger(
 ): Promise<{
   storeName: string
   storeAddress: string
-  items: Record<string, {
-    sku: string; name: string; brand: string
-    regularPrice: number; promoPrice: number | null
-    productUrl: string; size: string
-    matchedLocationId: string
-  }>
+  items: Record<string, StoreSearchResult>
 } | null> {
   if (locations.length === 0) return null
   const primary = locations[0]
   const locationIds = locations.map(l => l.locationId)
 
-  const items: Record<string, {
-    sku: string; name: string; brand: string
-    regularPrice: number; promoPrice: number | null
-    productUrl: string; size: string
-    matchedLocationId: string
-  }> = {}
+  const items: Record<string, StoreSearchResult> = {}
 
   await Promise.allSettled(
     ingredients.map(async (ingredient) => {
@@ -119,6 +118,45 @@ async function searchWalmart(
   return items
 }
 
+// ── Pure helper: validate + normalize AI-returned items (M5) ────────────────
+// Extracted so it can be unit-tested without invoking the Anthropic SDK.
+// Applies two post-processing passes:
+//   1. pricedSize.unit validation — unknown units cause pricedSize to be nulled.
+//   2. Confidence downgrade — 'real' or 'estimated_with_source' items with a
+//      null pricedSize (after pass 1) are downgraded to 'estimated'.
+export function validateAndNormalizeAiItems(rawItems: unknown[]): StoreItem[] {
+  const validUnits = new Set<string>(CANONICAL_UNITS)
+
+  return rawItems.map((raw) => {
+    if (raw === null || typeof raw !== 'object') {
+      console.warn('[ai-adapter] skipping non-object item in AI response')
+      return null
+    }
+
+    const item = raw as StoreItem & { pricedSize?: { quantity: number; unit: string } | null }
+
+    // Validate pricedSize.unit against CANONICAL_UNITS; null out on invalid unit.
+    let pricedSize: { quantity: number; unit: CanonicalUnit } | null = null
+    if (item.pricedSize != null) {
+      if (validUnits.has(item.pricedSize.unit)) {
+        pricedSize = { quantity: item.pricedSize.quantity, unit: item.pricedSize.unit as CanonicalUnit }
+      } else {
+        console.warn(`[ai-adapter] unknown pricedSize.unit "${item.pricedSize.unit}" for ${item.name} — nulling pricedSize`)
+        pricedSize = null
+      }
+    }
+
+    // Confidence downgrade when pricedSize is missing on non-estimated items.
+    let confidence = item.confidence
+    if ((confidence === 'real' || confidence === 'estimated_with_source') && pricedSize === null) {
+      console.warn(`[ai-adapter] downgrading ${item.name} from ${confidence} to 'estimated' — pricedSize missing`)
+      confidence = 'estimated'
+    }
+
+    return { ...item, pricedSize, confidence } as StoreItem
+  }).filter((item): item is StoreItem => item !== null)
+}
+
 // ── AI: search all non-API stores for ALL ingredients (cache-first) ──────────
 async function searchNonApiStores(
   ingredients: IngredientLine[],
@@ -162,7 +200,7 @@ async function searchNonApiStores(
 
   const recordShoppingPlanTool: AnthropicTool = {
     name: 'record_shopping_plan',
-    description: 'Emit the final structured shopping plan.',
+    description: 'Emit the final structured shopping plan. For every item, report pricedSize — the package size YOU actually priced, not the user\'s input unit. Example: user asked for "2 lbs chicken breast" but you priced a 2.5 lb family pack from Whole Foods → pricedSize = { quantity: 2.5, unit: "lb" }. If you have no source (confidence=estimated), pricedSize may be null.',
     input_schema: {
       type: 'object',
       required: ['stores'],
@@ -185,7 +223,7 @@ async function searchNonApiStores(
                 type: 'array',
                 items: {
                   type: 'object',
-                  required: ['ingredientId', 'name', 'quantity', 'unit', 'unitPrice', 'lineTotal', 'confidence', 'isLoyaltyPrice'],
+                  required: ['ingredientId', 'name', 'quantity', 'unit', 'unitPrice', 'lineTotal', 'confidence', 'isLoyaltyPrice', 'pricedSize'],
                   properties: {
                     ingredientId: { type: 'string' },
                     name: { type: 'string' },
@@ -197,7 +235,20 @@ async function searchNonApiStores(
                     confidence: { type: 'string', enum: ['real', 'estimated_with_source', 'estimated'] },
                     proofUrl: { type: ['string', 'null'], description: 'Must be one of the citation URLs from the research pass. Never fabricate.' },
                     isLoyaltyPrice: { type: 'boolean' },
-                    nonMemberPrice: { type: ['number', 'null'] }
+                    nonMemberPrice: { type: ['number', 'null'] },
+                    pricedSize: {
+                      type: ['object', 'null'],
+                      description: 'The actual package size the model priced. REQUIRED when confidence is "real" or "estimated_with_source". Can be null only when confidence is "estimated" (pure guess with no source).',
+                      properties: {
+                        quantity: { type: 'number', description: 'e.g. 32 for a 32 oz jug' },
+                        unit: {
+                          type: 'string',
+                          enum: ['g', 'kg', 'ml', 'l', 'oz', 'lb', 'fl_oz', 'cup', 'pt', 'qt', 'gal', 'each', 'dozen', 'bunch', 'head', 'clove', 'pinch'],
+                          description: 'Canonical unit used by E.G.G.S.'
+                        }
+                      },
+                      required: ['quantity', 'unit']
+                    }
                   }
                 }
               },
@@ -324,9 +375,15 @@ Emit the shopping plan now via record_shopping_plan.`
     return []
   }
 
-  const input = recordCall.input as { stores?: StorePlan[] } | null
-  const stores = input?.stores ?? []
-  console.log('[searchNonApiStores pass2] record_shopping_plan returned', stores.length, 'stores')
+  const input = recordCall.input as { stores?: unknown[] } | null
+  const rawStores = input?.stores ?? []
+  console.log('[searchNonApiStores pass2] record_shopping_plan returned', rawStores.length, 'stores')
+
+  // Apply per-item validation + pricedSize normalization (M5) then cast to StorePlan[].
+  const stores = rawStores.map((rawStore) => {
+    const s = rawStore as StorePlan & { items: unknown[] }
+    return { ...s, items: validateAndNormalizeAiItems(Array.isArray(s.items) ? s.items : []) }
+  }) as StorePlan[]
 
   // Cross-reference: any proofUrl the model put on items must appear in pass-1
   // citations. URLs not in citations are treated as fabricated and dropped.
@@ -485,7 +542,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           productUrl: kr.productUrl,
           proofUrl: kr.productUrl,
           isLoyaltyPrice: kr.promoPrice !== null && kr.promoPrice < kr.regularPrice,
-          nonMemberPrice: kr.promoPrice !== null ? kr.regularPrice : undefined
+          nonMemberPrice: kr.promoPrice !== null ? kr.regularPrice : undefined,
+          pricedSize: null
         })
       } else {
         krogerItems.push({
@@ -502,7 +560,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           proofUrl: undefined,
           isLoyaltyPrice: false,
           nonMemberPrice: undefined,
-          notAvailable: true
+          notAvailable: true,
+          pricedSize: null
         })
       }
     }
@@ -548,7 +607,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           productUrl: wm.productUrl,
           proofUrl: wm.productUrl,
           isLoyaltyPrice: wm.promoPrice !== null && wm.promoPrice < wm.regularPrice,
-          nonMemberPrice: wm.promoPrice !== null ? wm.regularPrice : undefined
+          nonMemberPrice: wm.promoPrice !== null ? wm.regularPrice : undefined,
+          pricedSize: null
         })
       } else {
         walmartItems.push({
@@ -565,7 +625,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           proofUrl: undefined,
           isLoyaltyPrice: false,
           nonMemberPrice: undefined,
-          notAvailable: true
+          notAvailable: true,
+          pricedSize: null
         })
       }
     }
@@ -624,7 +685,10 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
       // Check cache first — cache wins over AI result (24h TTL means it's recent)
       const cacheHit = cacheHits.get(`${bannerKey}::${item.ingredientId}`)
       if (cacheHit) {
-        Object.assign(item, cacheHit.item, { ingredientId: item.ingredientId })
+        Object.assign(item, cacheHit.item, {
+          ingredientId: item.ingredientId,
+          pricedSize: cacheHit.item.pricedSize ?? null,
+        })
         continue
       }
 
@@ -674,7 +738,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           proofUrl: undefined,
           isLoyaltyPrice: false,
           nonMemberPrice: undefined,
-          notAvailable: true
+          notAvailable: true,
+          pricedSize: null
         })
       }
     }
@@ -690,11 +755,91 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   const finalStores = allStores.slice(0, body.settings.maxStores)
 
   const allItems: StoreItem[] = finalStores.flatMap(s => s.items.filter(i => !i.notAvailable))
-  const subtotal = finalStores.reduce((s, st) => s + st.subtotal, 0)
-  const tax = finalStores.reduce((s, st) => s + st.estimatedTax, 0)
-  const total = Math.round((subtotal + tax) * 100) / 100
   const realCount = allItems.filter(i => i.confidence === 'real').length
   const estimatedCount = allItems.filter(i => i.confidence !== 'real').length
+
+  // ── Totals: SHOPPING_V2 uses best-basket selector; legacy sums all stores ──
+  let subtotal: number
+  let tax: number
+  let total: number
+  let bestBasketTotal: number | null = null
+  let planWinners: WinnerResult[] | undefined
+  let resolvedSpecs: ShoppableItemSpec[] | undefined
+
+  if (c.env.SHOPPING_V2 === 'true') {
+    const userProfile: UserProfile = {
+      // Request-first to match the AI-prompt helper's order (line ~165) — the
+      // per-request setting logically takes precedence over the account default.
+      avoid_brands: [
+        ...(body.settings?.avoidBrands ?? []),
+        ...(user?.avoid_brands ?? []),
+      ],
+    }
+
+    // M9: Use body.resolvedSpecs if the caller provided them (from /api/clarify),
+    // else fall back to extractSpecs on an interim plan constructed from store results.
+    if (body.resolvedSpecs && body.resolvedSpecs.length > 0) {
+      try {
+        resolvedSpecs = body.resolvedSpecs.map(validateSpecInput) as ShoppableItemSpec[]
+      } catch (err) {
+        console.warn('[plan] resolvedSpecs validation failed, falling back to extractSpecs:', err)
+        // Fall through to extractSpecs below
+      }
+    }
+    if (!resolvedSpecs || resolvedSpecs.length === 0) {
+      // Build a minimal interim plan so extractSpecs can synthesize from store items.
+      const interimPlan: ShoppingPlan = {
+        id: crypto.randomUUID(),
+        generatedAt: new Date().toISOString(),
+        meta: {
+          location: body.location,
+          storesQueried: finalStores.map(s => ({ name: s.storeName, source: s.priceSource })),
+          modelUsed: '__interim__',
+          budgetMode: body.budget?.mode ?? 'calculate',
+        },
+        ingredients,
+        stores: finalStores,
+        summary: { subtotal: 0, estimatedTax: 0, total: 0, realPriceCount: 0, estimatedPriceCount: 0 },
+      }
+      resolvedSpecs = extractSpecs(interimPlan)
+    }
+
+    // Compute per-item winners and attach to the plan.
+    planWinners = resolvedSpecs.map(spec => selectWinner(spec, finalStores, userProfile))
+
+    // Sum winner lineTotals for the best-basket total (replaces the legacy summing bug).
+    const winnerSubtotalRaw = planWinners.reduce((s, w) => s + (w.winner?.item.lineTotal ?? 0), 0)
+    subtotal = Math.round(winnerSubtotalRaw * 100) / 100
+    tax = Math.round(subtotal * 0.0825 * 100) / 100
+    total = Math.round((subtotal + tax) * 100) / 100
+    bestBasketTotal = total
+  } else {
+    // Legacy: sum every store's subtotal (known to 4.5× inflate the total)
+    subtotal = finalStores.reduce((s, st) => s + st.subtotal, 0)
+    tax = finalStores.reduce((s, st) => s + st.estimatedTax, 0)
+    total = Math.round((subtotal + tax) * 100) / 100
+  }
+
+  // ── M11: Instacart Recipe Page API — fire-and-forget ────────────────────
+  // Attach a shoppable Instacart URL to the plan when INSTACART_IDP_API_KEY is
+  // configured.  Fails silently: a failed IDP call never blocks plan delivery.
+  // Only runs on the SHOPPING_V2 path (resolvedSpecs required); skip on legacy.
+  let instacartUrl: string | undefined
+  if (c.env.INSTACART_IDP_API_KEY && resolvedSpecs && resolvedSpecs.length > 0) {
+    try {
+      const idp = new IdpClient({ apiKey: c.env.INSTACART_IDP_API_KEY })
+      const idpTitle = `E.G.G.S. Shopping List — ${new Date().toISOString().slice(0, 10)}`
+      // TODO: generate planId (crypto.randomUUID()) before this block so the
+      // linkback can be `https://eggs.app/plan/{planId}` per DESIGN.md §III.
+      // Current placeholder works for the button render but loses the deep-link
+      // back to the specific plan.
+      const idpLinkback = 'https://eggs.app'
+      const idpResult = await idp.createShoppingListPage(resolvedSpecs, idpTitle, idpLinkback)
+      instacartUrl = idpResult.productsLinkUrl
+    } catch (err) {
+      console.warn('[plan] Instacart IDP call failed, continuing without link:', err)
+    }
+  }
 
   // ── Narrative summary ────────────────────────────────────────────────────
   let planNarrative = ''
@@ -751,7 +896,9 @@ Write only the summary paragraph, no preamble.`
       budgetCeiling: body.budget?.amount,
       budgetExceeded: body.budget?.mode === 'ceiling' && body.budget.amount
         ? total > body.budget.amount
-        : undefined
+        : undefined,
+      // M9: persist resolved specs for future reads / recompute-at-read
+      ...(resolvedSpecs ? { specs: resolvedSpecs } : {})
     },
     ingredients,
     stores: finalStores,
@@ -762,7 +909,11 @@ Write only the summary paragraph, no preamble.`
       total,
       realPriceCount: realCount,
       estimatedPriceCount: estimatedCount
-    }
+    },
+    // M9: attach winners for the best-basket UI (only on SHOPPING_V2 plans)
+    ...(planWinners ? { winners: planWinners } : {}),
+    // M11: Instacart Recipe Page URL (absent when IDP key is missing or call failed)
+    ...(instacartUrl ? { instacartUrl } : {})
   }
 
   // Persist plan
@@ -773,7 +924,8 @@ Write only the summary paragraph, no preamble.`
       event_id: body.eventId ?? null,
       user_id: userId,
       plan_data: shoppingPlan,
-      model_used: shoppingPlan.meta.modelUsed
+      model_used: shoppingPlan.meta.modelUsed,
+      best_basket_total: bestBasketTotal  // null for legacy path; numeric for SHOPPING_V2 path
     })
     .select()
     .single()

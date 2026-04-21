@@ -1,25 +1,61 @@
-// eggs-frontend/src/lib/planTotals.ts
-// Client-side mirror of the server's best-basket total selector.
+// Inspired by M9's planTotalsView.ts. Keep imports minimal and types strict.
+import type { ShoppingPlanRecord, ShoppingPlan } from '../types'
 
-import type { ShoppingPlanRecord } from '../types'
-
-// ─── Internal helper ──────────────────────────────────────────────────────────
+const TAX_RATE = 0.0825
 
 /**
- * Recomputes the best-basket total from raw store data.
+ * Returns the best-basket total for a historical plan.
  *
- * For each unique ingredientId across all stores, picks the cheapest available
- * item's lineTotal. Sums them, adds 8.25% tax, rounds to 2 decimal places.
+ * Priority:
+ *   1. plan.best_basket_total column (post-M8 plans written with SHOPPING_V2 on).
+ *   2. Client-side recompute from plan_data.stores — cheapest lineTotal per
+ *      ingredientId (simplification: no brand filter or unit normalization).
+ *   3. Last-resort: plan.plan_data.summary.total (the legacy bugged value)
+ *      with console.warn.
  *
- * This is a simplified client-side mirror of the server's computeBestBasketTotal.
- * It does cheapest-per-ingredient without brand filtering or unit normalization.
- * That is intentional — legacy plans are display-only, so an approximation suffices.
+ * Known divergence vs. server computeBestBasketTotal:
+ *   - Frontend recompute (Path 2) does NOT apply `avoid_brands` filtering. A user
+ *     with avoid_brands set will see a slightly lower Dashboard total than the
+ *     server's selectWinner-driven total for the same plan, because the frontend
+ *     may pick an avoided-brand winner the server would exclude.
+ *   - Tax rounding also differs subtly: server rounds subtotal and tax separately;
+ *     frontend folds both into a single multiplication then rounds once. Max $0.01
+ *     delta on typical grocery runs.
+ *   - Both drifts are acceptable for display-only Dashboard widgets. When the
+ *     server fills `best_basket_total` (Path 1), there is no drift.
  */
-function recomputeTotalFromStores(plan: ShoppingPlanRecord['plan_data']): number {
+export function getPlanTotal(plan: ShoppingPlanRecord): number {
+  // Path 1: column (may be null on legacy rows or when SHOPPING_V2 was off at write time)
+  if (typeof plan.best_basket_total === 'number' && !isNaN(plan.best_basket_total)) {
+    return plan.best_basket_total
+  }
+
+  // Path 2: recompute from stores
+  const planData = plan.plan_data
+  if (planData && planData.stores && Array.isArray(planData.stores)) {
+    try {
+      return recomputeTotalFromStores(planData)
+    } catch (err) {
+      console.warn('[getPlanTotal] recompute failed, falling back to legacy summary.total:', err)
+    }
+  }
+
+  // Path 3: last-resort legacy fallback
+  const legacyTotal = planData?.summary?.total
+  if (typeof legacyTotal === 'number' && !isNaN(legacyTotal)) {
+    console.warn('[getPlanTotal] using legacy summary.total — recompute unavailable')
+    return legacyTotal
+  }
+
+  return 0
+}
+
+function recomputeTotalFromStores(plan: ShoppingPlan): number {
   const bestPerIngredient = new Map<string, number>()
   for (const store of plan.stores ?? []) {
     for (const item of store.items ?? []) {
       if (item.notAvailable) continue
+      if (typeof item.lineTotal !== 'number' || isNaN(item.lineTotal)) continue
       const prev = bestPerIngredient.get(item.ingredientId) ?? Infinity
       if (item.lineTotal < prev) {
         bestPerIngredient.set(item.ingredientId, item.lineTotal)
@@ -27,41 +63,6 @@ function recomputeTotalFromStores(plan: ShoppingPlanRecord['plan_data']): number
     }
   }
   const subtotal = Array.from(bestPerIngredient.values()).reduce((a, b) => a + b, 0)
-  const total = subtotal * 1.0825
+  const total = subtotal * (1 + TAX_RATE)
   return Math.round(total * 100) / 100
-}
-
-// ─── Public API ───────────────────────────────────────────────────────────────
-
-/**
- * Returns the best-basket total for a historical plan row.
- *
- * Priority:
- *   1. `plan.best_basket_total` column (post-M8 plans, when server-side
- *      SHOPPING_V2 was on at write time).
- *   2. Recompute from `plan.plan_data.stores` via client-side mirror of
- *      the selectWinner / computeBestBasketTotal logic.
- *   3. If recompute fails (malformed/missing data), fall back to
- *      `plan.plan_data.summary.total` (the legacy bugged value) as a
- *      last-resort display value, with a console warning.
- */
-export function getPlanTotal(plan: ShoppingPlanRecord): number {
-  // Path 1 — prefer the server-computed column when available
-  if (typeof plan.best_basket_total === 'number' && plan.best_basket_total >= 0) {
-    return plan.best_basket_total
-  }
-
-  // Path 2 — recompute from stores when plan_data is present
-  if (plan.plan_data?.stores) {
-    return recomputeTotalFromStores(plan.plan_data)
-  }
-
-  // Path 3 — last-resort: use the legacy bugged summary.total
-  const fallback = plan.plan_data?.summary?.total
-  if (typeof fallback === 'number') {
-    console.warn('[getPlanTotal] falling back to legacy summary.total for plan', plan.id)
-    return fallback
-  }
-
-  return 0
 }

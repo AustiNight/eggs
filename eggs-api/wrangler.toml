@@ -15,6 +15,24 @@ id = "914637fc5b194fbe89d5879179d6881b"
 binding = "URL_CACHE"
 id = "61e42f6b29bb45c6b64989befe3fcf89"
 
+# USDA FDC Branded Foods response cache. 7d TTL.
+# Create via: wrangler kv namespace create FDC_CACHE
+[[kv_namespaces]]
+binding = "FDC_CACHE"
+id = "REPLACE_ME_FDC_CACHE_ID"
+
+# Open Food Facts taxonomy graph cache. 7d TTL.
+# Create via: wrangler kv namespace create ONTOLOGY_CACHE
+[[kv_namespaces]]
+binding = "ONTOLOGY_CACHE"
+id = "REPLACE_ME_ONTOLOGY_CACHE_ID"
+
+# Resolved ShoppableItemSpec cache. 30d TTL.
+# Create via: wrangler kv namespace create SPEC_CACHE
+[[kv_namespaces]]
+binding = "SPEC_CACHE"
+id = "REPLACE_ME_SPEC_CACHE_ID"
+
 [vars]
 FREE_MONTHLY_LIMIT = "3"
 
@@ -39,6 +57,18 @@ id = "2f8f44b1a73c4d89bfd9a99ef7300796"
 [[env.staging.kv_namespaces]]
 binding = "URL_CACHE"
 id = "1dfca63fafe649e0b9c68cdbf67a55fe"
+
+[[env.staging.kv_namespaces]]
+binding = "FDC_CACHE"
+id = "REPLACE_ME_FDC_CACHE_STAGING_ID"
+
+[[env.staging.kv_namespaces]]
+binding = "ONTOLOGY_CACHE"
+id = "REPLACE_ME_ONTOLOGY_CACHE_STAGING_ID"
+
+[[env.staging.kv_namespaces]]
+binding = "SPEC_CACHE"
+id = "REPLACE_ME_SPEC_CACHE_STAGING_ID"
 
 [env.staging.vars]
 FREE_MONTHLY_LIMIT = "100"

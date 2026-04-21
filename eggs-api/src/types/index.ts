@@ -1,3 +1,16 @@
+// ─── ShoppableItemSpec + validators + Instacart wire format (M2) ─────────────
+export * from './spec.js'
+
+// ─── Canonical unit type (shared across unit conversion, store adapters, specs) ─
+
+export type CanonicalUnit =
+  | 'g' | 'kg'                              // mass metric
+  | 'ml' | 'l'                              // volume metric
+  | 'oz' | 'lb'                             // mass US
+  | 'fl_oz' | 'cup' | 'pt' | 'qt' | 'gal' // volume US
+  | 'each' | 'dozen'                        // count
+  | 'bunch' | 'head' | 'clove' | 'pinch'  // produce/culinary
+
 // ─── Hono app env (used everywhere) ──────────────────────────────────────────
 
 export type HonoEnv = {
@@ -11,6 +24,14 @@ export interface Env {
   RATE_LIMIT_KV: KVNamespace
   /** Per-(banner,ingredient) resolved StoreItem cache with 24h TTL. */
   URL_CACHE: KVNamespace
+  /** USDA FDC Branded Foods response cache. 7d TTL. (M3) */
+  FDC_CACHE: KVNamespace
+  /** Open Food Facts taxonomy graph cache. 7d TTL. (M3) */
+  ONTOLOGY_CACHE: KVNamespace
+  /** Resolved ShoppableItemSpec cache. 30d TTL. (M3/M6) */
+  SPEC_CACHE: KVNamespace
+  /** USDA FoodData Central API key — register free at https://api.data.gov/signup/ */
+  FDC_API_KEY: string
   FREE_MONTHLY_LIMIT: string
   ANTHROPIC_API_KEY: string
   CLERK_SECRET_KEY: string
@@ -26,6 +47,30 @@ export interface Env {
   WALMART_BASE_URL?: string
   TAPESTRY_SERVICE_KEY: string
   STRIPE_WEBHOOK_SECRET: string
+  /**
+   * Feature flag for the shopping-plan v2 best-value path.
+   * Set to 'true' to enable M8+ totals correction and best-basket selection.
+   * Absence or any other value keeps the legacy behaviour.
+   */
+  SHOPPING_V2?: string
+  /**
+   * Instacart Developer Platform (IDP) API key.
+   * Obtain at https://developers.instacart.com (self-serve, no approval needed).
+   * When absent the "Shop this list on Instacart" button is silently skipped.
+   */
+  INSTACART_IDP_API_KEY?: string
+}
+
+// ─── UserProfile — minimal shape consumed by selectWinner and plan route ─────
+
+/**
+ * Subset of DbUser fields needed for best-value selection and plan generation.
+ * Satisfies by DbUser (all fields present) — no runtime conversion required.
+ */
+export interface UserProfile {
+  avoid_brands: string[]
+  /** Pre-filter stores before calling selectWinner. Consumed by plan.ts (M8+), not by selectWinner. */
+  avoid_stores?: string[]
 }
 
 // ─── DB / User types ─────────────────────────────────────────────────────────
@@ -101,6 +146,8 @@ export interface DbShoppingPlan {
   plan_data: ShoppingPlan
   model_used: string | null
   generated_at: string
+  /** Null for legacy plans written before M8. Computed at read time for those rows. */
+  best_basket_total: number | null
 }
 
 export interface DbReconcileRecord {
@@ -169,6 +216,19 @@ export interface StoreItem {
   nonMemberPrice?: number
   /** True when this store doesn't carry the item — included to keep schema uniform across stores */
   notAvailable?: boolean
+  /**
+   * The actual package size the AI adapter priced.
+   *
+   * For AI-sourced items (priceSource='ai_estimated'): non-null when confidence
+   * is 'real' or 'estimated_with_source'; null when confidence is 'estimated'
+   * (pure guess). The `validateAndNormalizeAiItems` helper enforces this at
+   * parse time, downgrading confidence when pricedSize is missing.
+   *
+   * For direct-API sources (Kroger, Walmart): always null today. May be
+   * populated in a future milestone that parses the store-returned `size`
+   * string and maps it to canonical units.
+   */
+  pricedSize: { quantity: number; unit: CanonicalUnit } | null
 }
 
 export interface StorePlan {
@@ -199,6 +259,11 @@ export interface ShoppingPlan {
     budgetMode: 'ceiling' | 'calculate'
     budgetCeiling?: number
     budgetExceeded?: boolean
+    /**
+     * Resolved ShoppableItemSpecs — introduced in M6/M7, persisted in M8+.
+     * Absent on legacy plans written before M8.
+     */
+    specs?: import('./spec.js').ShoppableItemSpec[]
   }
   ingredients: IngredientLine[]
   stores: StorePlan[]
@@ -211,6 +276,17 @@ export interface ShoppingPlan {
     estimatedPriceCount: number
     narrative?: string
   }
+  /**
+   * Best-value winners per item — computed server-side by selectWinner().
+   * Populated in M9+ for SHOPPING_V2 plans. Absent on legacy plans.
+   */
+  winners?: import('../lib/bestValue.js').WinnerResult[]
+  /**
+   * Instacart Recipe Page URL for the full shopping list.
+   * Present on M11+ plans when INSTACART_IDP_API_KEY is configured and the
+   * IDP call succeeded. Absent otherwise — the button should not render.
+   */
+  instacartUrl?: string
 }
 
 // ─── Request / Response types ─────────────────────────────────────────────────
@@ -227,6 +303,12 @@ export interface PlanSettings {
 export interface PricePlanRequest {
   ingredients: IngredientLine[]
   resolvedClarifications?: Record<string, string>
+  /**
+   * Resolved ShoppableItemSpecs from /api/clarify, passed back by the frontend.
+   * When present, used directly instead of re-synthesizing from store items.
+   * Populated in M9+ by Plan.tsx / EventShop.tsx after the clarification step.
+   */
+  resolvedSpecs?: import('./spec.js').ShoppableItemSpec[]
   location: { lat: number; lng: number }
   settings: PlanSettings
   budget?: { mode: 'ceiling' | 'calculate'; amount?: number }
