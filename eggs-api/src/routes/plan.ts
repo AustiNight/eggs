@@ -11,7 +11,9 @@ import type {
   UserProfile
 } from '../types/index.js'
 import { CANONICAL_UNITS } from '../types/spec.js'
-import { computeBestBasketTotal } from '../lib/planTotals.js'
+import { computeBestBasketTotal, extractSpecs } from '../lib/planTotals.js'
+import { selectWinner } from '../lib/bestValue.js'
+import type { WinnerResult } from '../lib/bestValue.js'
 import { getSupabase } from '../db/client.js'
 import { requireAuthOrServiceKey } from '../middleware/auth.js'
 import { enforceFreeLimit } from '../middleware/limits.js'
@@ -759,25 +761,10 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   let tax: number
   let total: number
   let bestBasketTotal: number | null = null
+  let planWinners: WinnerResult[] | undefined
+  let resolvedSpecs: import('../types/spec.js').ShoppableItemSpec[] | undefined
 
   if (c.env.SHOPPING_V2 === 'true') {
-    // Build an interim plan-shaped object for computeBestBasketTotal.
-    // specs are not yet persisted at this point in the route (M8 write path),
-    // so this uses the synthesize-from-store-items fallback inside extractSpecs.
-    const interimPlan: ShoppingPlan = {
-      id: crypto.randomUUID(),
-      generatedAt: new Date().toISOString(),
-      meta: {
-        location: body.location,
-        storesQueried: finalStores.map(s => ({ name: s.storeName, source: s.priceSource })),
-        // Sentinel: interimPlan is only consumed by computeBestBasketTotal and never persisted.
-        modelUsed: '__interim__',
-        budgetMode: body.budget?.mode ?? 'calculate',
-      },
-      ingredients,
-      stores: finalStores,
-      summary: { subtotal: 0, estimatedTax: 0, total: 0, realPriceCount: 0, estimatedPriceCount: 0 },
-    }
     const userProfile: UserProfile = {
       // Request-first to match the AI-prompt helper's order (line ~165) — the
       // per-request setting logically takes precedence over the account default.
@@ -786,10 +773,37 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
         ...(user?.avoid_brands ?? []),
       ],
     }
-    const bestBasket = computeBestBasketTotal(interimPlan, userProfile)
-    subtotal = bestBasket.subtotal
-    tax = bestBasket.estimatedTax
-    total = bestBasket.total
+
+    // M9: Use body.resolvedSpecs if the caller provided them (from /api/clarify),
+    // else fall back to extractSpecs on an interim plan constructed from store results.
+    if (body.resolvedSpecs && body.resolvedSpecs.length > 0) {
+      resolvedSpecs = body.resolvedSpecs
+    } else {
+      // Build a minimal interim plan so extractSpecs can synthesize from store items.
+      const interimPlan: ShoppingPlan = {
+        id: crypto.randomUUID(),
+        generatedAt: new Date().toISOString(),
+        meta: {
+          location: body.location,
+          storesQueried: finalStores.map(s => ({ name: s.storeName, source: s.priceSource })),
+          modelUsed: '__interim__',
+          budgetMode: body.budget?.mode ?? 'calculate',
+        },
+        ingredients,
+        stores: finalStores,
+        summary: { subtotal: 0, estimatedTax: 0, total: 0, realPriceCount: 0, estimatedPriceCount: 0 },
+      }
+      resolvedSpecs = extractSpecs(interimPlan)
+    }
+
+    // Compute per-item winners and attach to the plan.
+    planWinners = resolvedSpecs.map(spec => selectWinner(spec, finalStores, userProfile))
+
+    // Sum winner lineTotals for the best-basket total (replaces the legacy summing bug).
+    const winnerSubtotalRaw = planWinners.reduce((s, w) => s + (w.winner?.item.lineTotal ?? 0), 0)
+    subtotal = Math.round(winnerSubtotalRaw * 100) / 100
+    tax = Math.round(subtotal * 0.0825 * 100) / 100
+    total = Math.round((subtotal + tax) * 100) / 100
     bestBasketTotal = total
   } else {
     // Legacy: sum every store's subtotal (known to 4.5× inflate the total)
@@ -853,7 +867,9 @@ Write only the summary paragraph, no preamble.`
       budgetCeiling: body.budget?.amount,
       budgetExceeded: body.budget?.mode === 'ceiling' && body.budget.amount
         ? total > body.budget.amount
-        : undefined
+        : undefined,
+      // M9: persist resolved specs for future reads / recompute-at-read
+      ...(resolvedSpecs ? { specs: resolvedSpecs } : {})
     },
     ingredients,
     stores: finalStores,
@@ -864,7 +880,9 @@ Write only the summary paragraph, no preamble.`
       total,
       realPriceCount: realCount,
       estimatedPriceCount: estimatedCount
-    }
+    },
+    // M9: attach winners for the best-basket UI (only on SHOPPING_V2 plans)
+    ...(planWinners ? { winners: planWinners } : {})
   }
 
   // Persist plan

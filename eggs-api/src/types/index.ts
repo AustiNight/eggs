@@ -270,6 +270,11 @@ export interface ShoppingPlan {
     estimatedPriceCount: number
     narrative?: string
   }
+  /**
+   * Best-value winners per item — computed server-side by selectWinner().
+   * Populated in M9+ for SHOPPING_V2 plans. Absent on legacy plans.
+   */
+  winners?: import('../lib/bestValue.js').WinnerResult[]
 }
 
 // ─── Request / Response types ─────────────────────────────────────────────────
@@ -286,6 +291,12 @@ export interface PlanSettings {
 export interface PricePlanRequest {
   ingredients: IngredientLine[]
   resolvedClarifications?: Record<string, string>
+  /**
+   * Resolved ShoppableItemSpecs from /api/clarify, passed back by the frontend.
+   * When present, used directly instead of re-synthesizing from store items.
+   * Populated in M9+ by Plan.tsx / EventShop.tsx after the clarification step.
+   */
+  resolvedSpecs?: import('./spec.js').ShoppableItemSpec[]
   location: { lat: number; lng: number }
   settings: PlanSettings
   budget?: { mode: 'ceiling' | 'calculate'; amount?: number }

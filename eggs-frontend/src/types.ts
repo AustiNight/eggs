@@ -4,6 +4,41 @@ export type EventStatus = 'planning' | 'shopping' | 'reconcile_needed' | 'comple
 export type PriceSource = 'kroger_api' | 'walmart_api' | 'ai_estimated'
 export type Confidence = 'real' | 'estimated_with_source' | 'estimated'
 
+// ─── M9: Best-basket winner types (frontend mirror of bestValue.ts) ───────────
+// Uses `string` for units to keep UI decoupled from backend's CanonicalUnit.
+
+export interface Candidate {
+  storeName: string
+  storeBanner: string
+  distanceMiles: number | undefined
+  item: StoreItem
+  parsedSize: { quantity: number; unit: string } | null
+  pricePerBase: number | null
+  excludeReason?: 'unit_mismatch' | 'size_unparseable' | 'not_available' | 'avoid_brand' | 'brand_mismatch'
+}
+
+/**
+ * Minimal frontend mirror of ShoppableItemSpec — only the fields the UI needs.
+ * The full spec lives server-side in plan.meta.specs.
+ */
+export interface ShoppableItemSpecMirror {
+  id: string
+  sourceText: string
+  displayName: string
+  brand: string | null
+  brandLocked: boolean
+  quantity: number
+  unit: string
+}
+
+export interface WinnerResult {
+  spec: ShoppableItemSpecMirror
+  winner: Candidate | null
+  eligibleCandidates: Candidate[]
+  allCandidates: Candidate[]
+  warning?: 'avoid_brand_lock_conflict' | 'all_avoided_fallback'
+}
+
 export interface UserProfile {
   id: string
   email: string
@@ -134,6 +169,8 @@ export interface ShoppingPlan {
     budgetMode: 'ceiling' | 'calculate'
     budgetCeiling?: number
     budgetExceeded?: boolean
+    /** Resolved specs — present on M8+ SHOPPING_V2 plans. */
+    specs?: ShoppableItemSpecMirror[]
   }
   ingredients: IngredientLine[]
   stores: StorePlan[]
@@ -146,6 +183,8 @@ export interface ShoppingPlan {
     estimatedPriceCount: number
     narrative?: string
   }
+  /** Per-item best-value winners — present on M9+ SHOPPING_V2 plans. */
+  winners?: WinnerResult[]
 }
 
 export interface ShoppingItem {

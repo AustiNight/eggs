@@ -5,7 +5,8 @@ import { ChevronLeft, ExternalLink, ShoppingCart, AlertTriangle, CheckCircle } f
 import { getEvent, scaleRecipes, clarifyIngredients, generatePlan, updateEvent } from '../lib/api'
 import type {
   ShoppingPlan, StorePlan, StoreItem, IngredientLine,
-  ClarificationRequest, PlanSettings, ShopStatus, Confidence
+  ClarificationRequest, PlanSettings, ShopStatus, Confidence,
+  ShoppableItemSpecMirror
 } from '../types'
 
 // ─── Source badge ─────────────────────────────────────────────────────────────
@@ -300,6 +301,7 @@ export default function EventShop() {
   const [eventName, setEventName] = useState<string>()
   const [ingredients, setIngredients] = useState<IngredientLine[]>([])
   const [clarifications, setClarifications] = useState<ClarificationRequest[] | null>(null)
+  const [pendingSpecs, setPendingSpecs] = useState<ShoppableItemSpecMirror[] | undefined>(undefined)
   const [plan, setPlan] = useState<ShoppingPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -314,7 +316,8 @@ export default function EventShop() {
 
   const runPipeline = useCallback(async (
     ingredientsList?: IngredientLine[],
-    resolvedClarifications?: Record<string, string>
+    resolvedClarifications?: Record<string, string>,
+    specs?: ShoppableItemSpecMirror[]
   ) => {
     if (!id) return
     const token = await getToken()
@@ -351,7 +354,8 @@ export default function EventShop() {
         },
         eventId: id,
         eventName,
-        headcount: locationState?.headcount
+        headcount: locationState?.headcount,
+        ...(specs && specs.length > 0 ? { resolvedSpecs: specs } : {})
       })
 
       setPlan(result)
@@ -401,15 +405,21 @@ export default function EventShop() {
         const clarifyResult = await clarifyIngredients(token, scaleResult.ingredients)
         if (cancelled) return
 
+        // Capture any pre-resolved specs (M6+)
+        const specsFromClarify = clarifyResult.specs
+          ? (Object.values(clarifyResult.specs) as ShoppableItemSpecMirror[])
+          : undefined
+
         if (clarifyResult.clarifications && clarifyResult.clarifications.length > 0) {
+          setPendingSpecs(specsFromClarify)
           setClarifications(clarifyResult.clarifications)
           setShopStatus('clarifying')
           // Wait for user to answer — runPipeline called from ClarificationModal onComplete
           return
         }
 
-        // No clarifications needed — pass ingredients directly to avoid stale closure
-        await runPipeline(scaleResult.ingredients)
+        // No clarifications needed — pass ingredients + specs to avoid stale closure
+        await runPipeline(scaleResult.ingredients, undefined, specsFromClarify)
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Something went wrong')
@@ -424,12 +434,13 @@ export default function EventShop() {
 
   const handleClarificationComplete = (resolved: Record<string, string>) => {
     setClarifications(null)
-    runPipeline(undefined, resolved)
+    runPipeline(undefined, resolved, pendingSpecs)
   }
 
   const handleReset = () => {
     setShopStatus('idle')
     setClarifications(null)
+    setPendingSpecs(undefined)
     setPlan(null)
     setError(null)
     setIngredients([])

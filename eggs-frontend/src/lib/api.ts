@@ -7,6 +7,7 @@ import type {
   ClarificationRequest,
   ShoppingPlan,
   ShoppingPlanRecord,
+  ShoppableItemSpecMirror,
   PlanSettings,
   ReconcileRecord
 } from '../types'
@@ -131,7 +132,14 @@ export const scaleRecipes = (
   })
 
 export const clarifyIngredients = (token: string, ingredients: IngredientLine[]) =>
-  req<{ clarifications: ClarificationRequest[] | null }>('/api/clarify', {
+  req<{
+    clarifications: ClarificationRequest[] | null
+    /**
+     * Resolved specs for items that didn't need clarification.
+     * Keyed by ingredientId. New in M6; absent on older API versions.
+     */
+    specs?: Record<string, ShoppableItemSpecMirror>
+  }>('/api/clarify', {
     token,
     method: 'POST',
     body: JSON.stringify({ ingredients })
@@ -140,6 +148,12 @@ export const clarifyIngredients = (token: string, ingredients: IngredientLine[])
 export interface PricePlanInput {
   ingredients: IngredientLine[]
   resolvedClarifications?: Record<string, string>
+  /**
+   * Resolved specs from /api/clarify, forwarded to /api/price-plan so the
+   * server can persist them and compute best-basket winners accurately.
+   * Populated in M9+ after the clarification step.
+   */
+  resolvedSpecs?: ShoppableItemSpecMirror[]
   location: { lat: number; lng: number }
   settings: PlanSettings
   budget?: { mode: 'ceiling' | 'calculate'; amount?: number }
