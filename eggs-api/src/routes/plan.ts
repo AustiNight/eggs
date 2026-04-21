@@ -13,6 +13,7 @@ import type {
 import { CANONICAL_UNITS, validateSpecInput } from '../types/spec.js'
 import type { ShoppableItemSpec } from '../types/spec.js'
 import { computeBestBasketTotal, extractSpecs } from '../lib/planTotals.js'
+import { parseSize } from '../lib/units.js'
 import { selectWinner } from '../lib/bestValue.js'
 import type { WinnerResult } from '../lib/bestValue.js'
 import { getSupabase } from '../db/client.js'
@@ -543,7 +544,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           proofUrl: kr.productUrl,
           isLoyaltyPrice: kr.promoPrice !== null && kr.promoPrice < kr.regularPrice,
           nonMemberPrice: kr.promoPrice !== null ? kr.regularPrice : undefined,
-          pricedSize: null
+          pricedSize: parseSize(kr.size) ?? null
         })
       } else {
         krogerItems.push({
@@ -608,7 +609,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           proofUrl: wm.productUrl,
           isLoyaltyPrice: wm.promoPrice !== null && wm.promoPrice < wm.regularPrice,
           nonMemberPrice: wm.promoPrice !== null ? wm.regularPrice : undefined,
-          pricedSize: null
+          pricedSize: parseSize(wm.size) ?? null
         })
       } else {
         walmartItems.push({
