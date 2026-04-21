@@ -99,6 +99,9 @@ export interface ShoppingPlanRecord {
   id: string
   generated_at: string
   plan_data: ShoppingPlan
+  /** Corrected best-basket total written at plan generation time (post-M8).
+   *  Null for legacy plans — `getPlanTotal()` will recompute in that case. */
+  best_basket_total?: number | null
 }
 
 export interface StorePlan {

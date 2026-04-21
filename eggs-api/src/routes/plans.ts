@@ -12,7 +12,7 @@ plans.get('/', requireAuth, async (c) => {
 
   const { data } = await supabase
     .from('shopping_plans')
-    .select('id, generated_at, plan_data')
+    .select('id, generated_at, plan_data, best_basket_total')
     .eq('user_id', userId)
     .is('event_id', null)
     .order('generated_at', { ascending: false })
