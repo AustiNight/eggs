@@ -140,6 +140,7 @@ export interface ShoppingPlanRecord {
   id: string
   generated_at: string
   plan_data: ShoppingPlan
+  best_basket_total?: number | null
 }
 
 export interface StorePlan {

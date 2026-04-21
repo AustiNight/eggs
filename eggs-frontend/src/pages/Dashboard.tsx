@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { listEvents, listShoppingPlans, getMe } from '../lib/api'
 import type { EggsEvent, UserProfile, ShoppingPlanRecord } from '../types'
+import { getPlanTotal } from '../lib/planTotals'
 
 // ─── Tier badge ───────────────────────────────────────────────────────────────
 
@@ -135,7 +136,7 @@ function PlanCard({ record }: { record: ShoppingPlanRecord }) {
           </div>
         </div>
         <div className="text-right shrink-0">
-          <div className="font-bold text-amber-400">${plan.summary.total.toFixed(2)}</div>
+          <div className="font-bold text-amber-400">${getPlanTotal(record).toFixed(2)}</div>
           <div className="text-[10px] mt-0.5" style={{ color: '#94a3b8' }}>
             {liveCount}/{totalItems} live
           </div>
@@ -238,7 +239,7 @@ function MonthlyActivityChart({ plans, events }: { plans: ShoppingPlanRecord[]; 
       const key = rec.generated_at.slice(0, 7)
       if (months[key]) {
         months[key].lists++
-        months[key].spend += rec.plan_data.summary.total
+        months[key].spend += getPlanTotal(rec)
       }
     }
     return Object.entries(months).map(([key, v]) => ({
@@ -353,7 +354,7 @@ export default function Dashboard() {
   const usageThisMonth = events.filter(e => e.created_at.startsWith(currentMonth)).length
 
   // Insight computations
-  const totalTracked = plans.reduce((s, p) => s + p.plan_data.summary.total, 0)
+  const totalTracked = plans.reduce((s, p) => s + getPlanTotal(p), 0)
   const uniqueStores = new Set(plans.flatMap(p => p.plan_data.stores.map(s => s.storeBanner || s.storeName))).size
   const totalItems = plans.reduce((s, p) => s + p.plan_data.ingredients.length, 0)
   const hasInsights = plans.length > 0 || events.length > 0
