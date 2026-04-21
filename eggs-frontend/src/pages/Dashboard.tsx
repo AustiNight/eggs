@@ -13,7 +13,6 @@ import {
 import { listEvents, listShoppingPlans, getMe } from '../lib/api'
 import { getPlanTotal } from '../lib/planTotals'
 import type { EggsEvent, UserProfile, ShoppingPlanRecord } from '../types'
-import { getPlanTotal } from '../lib/planTotals'
 
 // ─── Tier badge ───────────────────────────────────────────────────────────────
 
