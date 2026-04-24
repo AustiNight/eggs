@@ -1,6 +1,6 @@
 # E.G.G.S. Test Coverage Matrix
 
-**Last updated:** 2026-04-19  
+**Last updated:** 2026-04-23  
 **Rule:** Every new feature or change that may impact automated testing must update this file — even if the automation isn't written yet. The matrix is the source of truth for what tests *should* exist.
 
 ---
@@ -72,6 +72,10 @@
 | Navigate to /plan from dashboard | E2E @smoke | ✅ | 📋 | 📋 | 📋 | `e2e/plan-flow.spec.ts` | |
 | Enter items via ShoppingListInput | E2E | 📋 | 📋 | 📋 | 📋 | `e2e/plan-flow.spec.ts` | |
 | Clarification modal renders and accepts answers | E2E | 📋 | 📋 | 📋 | 📋 | `e2e/plan-flow.spec.ts` | |
+| Clarification modal emits structured `{ baseName, selectedOptions[] }` (not flattened string) | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-frontend/src/components/ClarificationModal.test.tsx` | Added 2026-04-23 — regression guard for Issue #2 |
+| buildSearchQuery composes clean provider query from structured clarification | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/lib/query-builder.test.ts` | Added 2026-04-23 |
+| plan route passes composed clean query to Kroger provider (integration) | Integration | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan.test.ts` | Added 2026-04-23 — wire-level proof |
+| selectWinner returns non-null winner when any store has a candidate (regression guard) | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/lib/bestValue.test.ts` | Added 2026-04-23 — Issue #1 regression |
 | Loading state: "analyzing" phase shows | E2E | 📋 | 📋 | ➖ | ➖ | `e2e/plan-flow.spec.ts` | |
 | Loading state: "discovering" phase shows | E2E | 📋 | 📋 | ➖ | ➖ | `e2e/plan-flow.spec.ts` | |
 | Loading state: "searching" phase shows | E2E | 📋 | 📋 | ➖ | ➖ | `e2e/plan-flow.spec.ts` | |
@@ -98,6 +102,17 @@
 | Avoid-brand warning icon + tooltip renders when warning present | Manual | ➖ | ➖ | ➖ | ➖ | `scripts/manual-verification/m9-best-basket.md` | M9 — manual browser only |
 | LegacyPlanView renders unchanged when plan.winners absent | Unit | 🟡 | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/components/PlanResult.test.tsx` | M9 — legacy path unchanged |
 | PerStorePanels section is collapsed by default | Manual | ➖ | ➖ | ➖ | ➖ | `scripts/manual-verification/m9-best-basket.md` | M9 — manual browser only |
+| CostBreakdownChart renders per-store legend on best-basket view | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-frontend/src/components/CostBreakdownChart.test.tsx` | Added 2026-04-23 — Issue #4 |
+| CostBreakdownChart returns null when data array is empty | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-frontend/src/components/CostBreakdownChart.test.tsx` | Added 2026-04-23 |
+| BestBasketView computes per-store totals from winners.item.lineTotal | Manual | ➖ | ➖ | ➖ | ➖ | `scripts/manual-verification/m9-best-basket.md` | 2026-04-23 — visual verify above winners list |
+| verifyProductContent: name tokens + price both appear = verified | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/lib/content-verifier.test.ts` | Added 2026-04-23 — Issue #3 |
+| verifyProductContent: name match but price mismatch = rejected | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/lib/content-verifier.test.ts` | Added 2026-04-23 |
+| verifyProductContent: price match but product mismatch = rejected | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/lib/content-verifier.test.ts` | Added 2026-04-23 |
+| verifyProductContent: HTTP non-2xx = rejected | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/lib/content-verifier.test.ts` | Added 2026-04-23 |
+| verifyProductContent: handles $X.XX, X.XX, X,XX price formats | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/lib/content-verifier.test.ts` | Added 2026-04-23 |
+| verifyProductContent: <60% name-token coverage = rejected | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/lib/content-verifier.test.ts` | Added 2026-04-23 |
+| verifyProductContent: abort timeout returns rejected with reason | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/lib/content-verifier.test.ts` | Added 2026-04-23 |
+| AI proof URLs downgraded to confidence=estimated when HTML-verify fails | Manual | ➖ | ➖ | ➖ | ➖ | `scripts/manual-verification/ai-proof-url-verification.md` | 2026-04-23 — wire integration |
 
 ---
 
