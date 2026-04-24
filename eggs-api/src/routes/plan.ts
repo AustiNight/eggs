@@ -28,6 +28,7 @@ import { WalmartClient } from '../integrations/walmart.js'
 import { IdpClient } from '../integrations/instacart-idp.js'
 import { getShopUrl, normalizeBanner } from '../integrations/store-urls.js'
 import { validateUrls } from '../lib/url-validator.js'
+import { verifyProductContent } from '../lib/content-verifier.js'
 import type { StoreSearchResult } from '../integrations/StoreAdapter.js'
 
 const plan = new Hono<HonoEnv>()
@@ -683,6 +684,23 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   }
   const verifiedUrls = await validateUrls(candidateUrls)
 
+  // Content-verify each HEAD-ok proofUrl: parse the page HTML and confirm
+  // the product name + price actually appear. Failures downgrade to estimated.
+  const verifiedContentByUrl = new Map<string, boolean>()
+  await Promise.all(
+    aiStorePlans.flatMap(store =>
+      store.items
+        .filter(it => it.proofUrl && verifiedUrls.has(it.proofUrl!))
+        .map(async it => {
+          const result = await verifyProductContent(it.proofUrl!, it.name, it.unitPrice)
+          verifiedContentByUrl.set(it.proofUrl!, result.verified)
+          if (!result.verified) {
+            console.warn('[ai-verify] rejected', { url: it.proofUrl, name: it.name, price: it.unitPrice, reason: result.reason })
+          }
+        })
+    )
+  )
+
   const cacheWrites: Array<{ banner: string; ingredient: IngredientLine; value: CachedStoreItem }> = []
 
   for (const aiStore of aiStorePlans) {
@@ -704,9 +722,10 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
         continue
       }
 
-      // Reconcile URLs: proofUrl only if HEAD-validated AND in citations
-      const verified = item.proofUrl && verifiedUrls.has(item.proofUrl)
-      if (verified) {
+      // Reconcile URLs: proofUrl only if HEAD-validated AND content-verified
+      const urlOk = item.proofUrl && verifiedUrls.has(item.proofUrl)
+      const contentOk = item.proofUrl ? verifiedContentByUrl.get(item.proofUrl) === true : false
+      if (urlOk && contentOk) {
         item.productUrl = item.proofUrl
         item.shopUrl = item.proofUrl as string
       } else {
