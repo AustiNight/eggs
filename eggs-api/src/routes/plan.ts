@@ -701,6 +701,10 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     )
   )
 
+  const totalChecked = verifiedContentByUrl.size
+  const rejected = Array.from(verifiedContentByUrl.values()).filter(v => !v).length
+  console.log('[ai-verify] summary', { totalChecked, rejected, rejectionRate: totalChecked ? rejected / totalChecked : 0 })
+
   const cacheWrites: Array<{ banner: string; ingredient: IngredientLine; value: CachedStoreItem }> = []
 
   for (const aiStore of aiStorePlans) {
