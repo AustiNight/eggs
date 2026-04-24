@@ -307,7 +307,7 @@ export interface PlanSettings {
 
 export interface PricePlanRequest {
   ingredients: IngredientLine[]
-  resolvedClarifications?: Record<string, string>
+  resolvedClarifications?: Record<string, ClarifiedAttributes>
   /**
    * Resolved ShoppableItemSpecs from /api/clarify, passed back by the frontend.
    * When present, used directly instead of re-synthesizing from store items.

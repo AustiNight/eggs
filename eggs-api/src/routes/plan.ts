@@ -8,13 +8,15 @@ import type {
   IngredientLine,
   KrogerLocation,
   CanonicalUnit,
-  UserProfile
+  UserProfile,
+  ClarifiedAttributes
 } from '../types/index.js'
 import { CANONICAL_UNITS, validateSpecInput } from '../types/spec.js'
 import type { ShoppableItemSpec } from '../types/spec.js'
 import { computeBestBasketTotal, extractSpecs } from '../lib/planTotals.js'
 import { parseSize } from '../lib/units.js'
 import { selectWinner } from '../lib/bestValue.js'
+import { buildSearchQuery } from '../lib/query-builder.js'
 import type { WinnerResult } from '../lib/bestValue.js'
 import { getSupabase } from '../db/client.js'
 import { requireAuthOrServiceKey } from '../middleware/auth.js'
@@ -451,7 +453,11 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
 
   const ingredients = body.ingredients.map(i => ({
     ...i,
-    name: body.resolvedClarifications?.[i.id] ?? i.clarifiedName ?? i.name
+    name: (() => {
+      const clar = body.resolvedClarifications?.[i.id]
+      if (clar) return buildSearchQuery(clar.baseName || i.name, clar.selectedOptions)
+      return i.clarifiedName ?? i.name
+    })()
   }))
 
   // ── Step 1: Direct API store discovery ───────────────────────────────────
