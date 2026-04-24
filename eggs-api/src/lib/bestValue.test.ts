@@ -563,3 +563,25 @@ describe('§2.5 three-item × four-store acceptance test', () => {
     expect(buggySum - bestBasket).toBeCloseTo(48.64, 2)
   })
 })
+
+describe('selectWinner regression — winners populate when candidates exist', () => {
+  it('returns a non-null winner when any store has a candidate for the spec', () => {
+    const spec = makeSpec({ id: 's1', displayName: 'chicken thighs', unit: 'lb' })
+    const item = makeItem({
+      ingredientId: 's1',
+      name: 'Kroger Boneless Skinless Chicken Thighs',
+      unit: '2 lb',
+      lineTotal: 9.98,
+      unitPrice: 4.99,
+      pricedSize: { quantity: 2, unit: 'lb' },
+    })
+    const store = makeStore({ storeName: 'Kroger', items: [item] })
+
+    const result = selectWinner(spec, [store], noUser)
+
+    expect(result.winner).not.toBeNull()
+    expect(result.winner?.item.name).toContain('Chicken Thighs')
+    expect(result.winner?.storeName).toBe('Kroger')
+    expect(result.eligibleCandidates).toHaveLength(1)
+  })
+})
