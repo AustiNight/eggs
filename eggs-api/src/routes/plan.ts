@@ -271,16 +271,21 @@ async function searchNonApiStores(
     researchResult = await provider.complete({
       system: `You are a professional grocery price research assistant for event chefs.
 
-TASK: research current prices for the listed ingredients across grocery stores near the given location. Use the web_search tool to find candidates; use web_fetch to confirm prices on actual product pages.
+TASK: research current prices for the listed ingredients across grocery stores near the given location.
+
+HARD REQUIREMENTS — these are non-negotiable:
+1. For EVERY product you plan to report, you MUST call web_fetch on the candidate product URL and visually confirm BOTH the product name AND the price appear on the fetched page BEFORE recording it.
+2. If web_fetch fails, returns a non-product page, or the product name / price does not appear, you MUST NOT include that URL as the proof. Either find a different URL and web_fetch that, or omit the URL and mark the item confidence:"estimated".
+3. Never fabricate a URL. Every URL must come from a web_search citation OR a web_fetch you performed. If you did not web_fetch it, prefix that line with "NO-FETCH:".
+4. Do NOT use web_search results alone as proof — web_search snippets are unreliable for price.
 
 ${excludeLine}
 
 REPORT FORMAT (plain text, one store per section):
 Store: <banner name>
 Address/Distance: <if known>
-- <ingredient id> | <product name> | $<unit price> | <URL from web_search or web_fetch — NEVER fabricate>
-  (mark confidence: "real" if web_fetched, "estimated_with_source" if web_search only, "estimated" if no URL)
-- ...
+- <ingredient id> | <product name> | $<unit price> | <URL> | FETCHED:<yes|no>
+  (confidence rule: "real" ONLY if FETCHED:yes and you confirmed name+price on the page; "estimated_with_source" if FETCHED:no but URL came from a credible web_search result; "estimated" if no URL at all.)
 
 Include ALL stores you find. If an item isn't carried at a store, still list it with price 0 and a "NOT CARRIED" note.
 Assume loyalty/member pricing. Tax rate 8.25%.
@@ -336,8 +341,8 @@ ${itemLines}`
 
 The ONLY action available to you is calling the record_shopping_plan tool. Call it exactly once with the full structured data derived from the research below.
 
-proofUrl MUST be one of the citation URLs provided. If no citation matches an item, set proofUrl to null.
-confidence MUST follow: "real" if the research explicitly states web_fetch confirmed the price, "estimated_with_source" if only web_search found a URL, "estimated" otherwise.`,
+proofUrl MUST be set to null UNLESS the research pass line for that item contains "FETCHED:yes". If FETCHED:no or "NO-FETCH:" appears on the line, you MUST set proofUrl to null and confidence to "estimated_with_source" at most.
+confidence MUST be "real" ONLY when FETCHED:yes AND the research text explicitly confirms both product name and price appeared on the fetched page. Otherwise downgrade to "estimated_with_source" or "estimated".`,
       messages: [
         {
           role: 'user',
