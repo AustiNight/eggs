@@ -16,6 +16,7 @@ import { updateEvent } from '../lib/api'
 import { TAX_RATE, round2, computeDisplayedTotal } from '../lib/planTotalsView'
 import LegacyPlanView from './LegacyPlanView'
 import BestBasketList from './BestBasketList'
+import CostBreakdownChart, { type StoreTotal } from './CostBreakdownChart'
 import PerStorePanels from './PerStorePanels'
 
 interface PlanResultProps {
@@ -88,6 +89,18 @@ function BestBasketView({ plan, winners, onReset, eventId, getToken }: BestBaske
     () => computeDisplayedTotal(winners, winnerOverrides),
     [winnerOverrides, winners]
   )
+
+  // Compute per-store cost totals for the pie chart
+  const storeTotals: StoreTotal[] = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const wr of winners) {
+      if (!wr.winner) continue
+      const storeName = wr.winner.storeName
+      const cost = wr.winner.item.lineTotal
+      totals.set(storeName, (totals.get(storeName) ?? 0) + cost)
+    }
+    return Array.from(totals, ([name, value]) => ({ name, value }))
+  }, [winners])
 
   const savings = plan.summary.estimatedSavings ?? 0
 
@@ -165,6 +178,7 @@ function BestBasketView({ plan, winners, onReset, eventId, getToken }: BestBaske
           Item-by-item winners
           <span className="text-xs text-slate-500 font-normal ml-1">— tap Swap to choose a different source</span>
         </h3>
+        {storeTotals.length > 0 && <CostBreakdownChart data={storeTotals} />}
         <BestBasketList
           winners={winners}
           winnerOverrides={winnerOverrides}
