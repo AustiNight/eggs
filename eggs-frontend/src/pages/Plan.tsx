@@ -9,7 +9,7 @@ import PlanResult from '../components/PlanResult'
 import SettingsPanel from '../components/SettingsPanel'
 import { clarifyIngredients, generatePlan, ApiError } from '../lib/api'
 import { saveToHistory } from '../services/storageService'
-import type { ShoppingPlan, PlanSettings, ClarificationRequest, IngredientLine, ShoppableItemSpecMirror } from '../types'
+import type { ShoppingPlan, PlanSettings, ClarificationRequest, IngredientLine, ShoppableItemSpecMirror, ClarifiedAttributes } from '../types'
 
 // Convert chef's raw shopping items into IngredientLine format for the API
 function itemsToIngredients(items: ShoppingItem[]): IngredientLine[] {
@@ -85,19 +85,27 @@ export default function Plan() {
     }
   }
 
-  const handleClarificationComplete = async (updates: Record<string, string>) => {
+  const handleClarificationComplete = async (answers: Record<string, ClarifiedAttributes>) => {
     setClarifications(null)
     const updatedItems = items.map(item =>
-      updates[item.id] ? { ...item, clarifiedName: updates[item.id] } : item
+      answers[item.id]
+        ? { ...item, clarifiedName: `${item.name} (${answers[item.id].selectedOptions.join(', ')})` }
+        : item
     )
     setItems(updatedItems)
 
     const token = await getToken()
     if (!token) return
-    await runPlan(itemsToIngredients(updatedItems), token, resolvedSpecs)
+    // Pass structured clarifications to the plan API for clean query composition
+    await runPlan(itemsToIngredients(updatedItems), token, resolvedSpecs, answers)
   }
 
-  const runPlan = async (ingredients: IngredientLine[], token: string, specs?: ShoppableItemSpecMirror[]) => {
+  const runPlan = async (
+    ingredients: IngredientLine[],
+    token: string,
+    specs?: ShoppableItemSpecMirror[],
+    resolvedClarifications?: Record<string, ClarifiedAttributes>
+  ) => {
     saveToHistory(items)
 
     // Phase 1: Geolocate + show store discovery state
@@ -126,7 +134,8 @@ export default function Plan() {
         ingredients,
         location: { lat, lng },
         settings,
-        ...(specs && specs.length > 0 ? { resolvedSpecs: specs } : {})
+        ...(specs && specs.length > 0 ? { resolvedSpecs: specs } : {}),
+        ...(resolvedClarifications ? { resolvedClarifications } : {})
       })
       clearTimeout(optimizingTimer)
       setPlan(result)

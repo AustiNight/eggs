@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
 import { HelpCircle, Check, CheckSquare, Square } from 'lucide-react'
-import { ClarificationRequest } from '../types'
+import { ClarificationRequest, ClarifiedAttributes } from '../types'
 
 interface ClarificationModalProps {
   requests: ClarificationRequest[]
-  onComplete: (updatedItems: Record<string, string>) => void
+  onComplete: (answers: Record<string, ClarifiedAttributes>) => void
 }
 
 const ClarificationModal: React.FC<ClarificationModalProps> = ({ requests, onComplete }) => {
@@ -20,12 +20,14 @@ const ClarificationModal: React.FC<ClarificationModalProps> = ({ requests, onCom
   }
 
   const handleSubmit = () => {
-    const answers: Record<string, string> = {}
+    const answers: Record<string, ClarifiedAttributes> = {}
     Object.entries(selections).forEach(([itemId, selectedSet]) => {
       if (selectedSet.size > 0) {
         const originalName = requests.find(r => r.itemId === itemId)?.originalName || ''
-        const details = Array.from(selectedSet).join(', ')
-        answers[itemId] = `${originalName} (${details})`
+        answers[itemId] = {
+          baseName: originalName,
+          selectedOptions: Array.from(selectedSet),
+        }
       }
     })
     onComplete(answers)

@@ -5,6 +5,7 @@ import type {
   Dish,
   IngredientLine,
   ClarificationRequest,
+  ClarifiedAttributes,
   ShoppingPlan,
   ShoppingPlanRecord,
   ShoppableItemSpecMirror,
@@ -147,7 +148,7 @@ export const clarifyIngredients = (token: string, ingredients: IngredientLine[])
 
 export interface PricePlanInput {
   ingredients: IngredientLine[]
-  resolvedClarifications?: Record<string, string>
+  resolvedClarifications?: Record<string, ClarifiedAttributes>
   /**
    * Resolved specs from /api/clarify, forwarded to /api/price-plan so the
    * server can persist them and compute best-basket winners accurately.

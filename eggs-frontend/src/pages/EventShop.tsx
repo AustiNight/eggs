@@ -6,7 +6,7 @@ import { getEvent, scaleRecipes, clarifyIngredients, generatePlan } from '../lib
 import PlanResult from '../components/PlanResult'
 import type {
   ShoppingPlan, IngredientLine,
-  ClarificationRequest, PlanSettings, ShopStatus, Confidence,
+  ClarificationRequest, ClarifiedAttributes, PlanSettings, ShopStatus, Confidence,
   ShoppableItemSpecMirror
 } from '../types'
 
@@ -85,7 +85,7 @@ function ClarificationModal({
   onComplete
 }: {
   clarifications: ClarificationRequest[]
-  onComplete: (resolved: Record<string, string>) => void
+  onComplete: (resolved: Record<string, ClarifiedAttributes>) => void
 }) {
   const [selections, setSelections] = useState<Record<string, string>>({})
 
@@ -93,7 +93,15 @@ function ClarificationModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onComplete(selections)
+    const answers: Record<string, ClarifiedAttributes> = {}
+    Object.entries(selections).forEach(([itemId, selectedOption]) => {
+      const originalName = clarifications.find(c => c.itemId === itemId)?.originalName || ''
+      answers[itemId] = {
+        baseName: originalName,
+        selectedOptions: [selectedOption]
+      }
+    })
+    onComplete(answers)
   }
 
   return (
@@ -132,7 +140,17 @@ function ClarificationModal({
         </button>
         <button
           type="button"
-          onClick={() => onComplete(selections)}
+          onClick={() => {
+            const answers: Record<string, ClarifiedAttributes> = {}
+            Object.entries(selections).forEach(([itemId, selectedOption]) => {
+              const originalName = clarifications.find(c => c.itemId === itemId)?.originalName || ''
+              answers[itemId] = {
+                baseName: originalName,
+                selectedOptions: [selectedOption]
+              }
+            })
+            onComplete(answers)
+          }}
           className="w-full py-2 text-sm"
           style={{ color: '#94a3b8' }}
         >
@@ -175,7 +193,7 @@ export default function EventShop() {
 
   const runPipeline = useCallback(async (
     ingredientsList?: IngredientLine[],
-    resolvedClarifications?: Record<string, string>,
+    resolvedClarifications?: Record<string, ClarifiedAttributes>,
     specs?: ShoppableItemSpecMirror[]
   ) => {
     if (!id) return
@@ -291,7 +309,7 @@ export default function EventShop() {
     return () => { cancelled = true }
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleClarificationComplete = (resolved: Record<string, string>) => {
+  const handleClarificationComplete = (resolved: Record<string, ClarifiedAttributes>) => {
     setClarifications(null)
     runPipeline(undefined, resolved, pendingSpecs)
   }
