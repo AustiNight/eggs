@@ -102,6 +102,13 @@ export interface ClarificationRequest {
   options: string[]
 }
 
+export interface ClarifiedAttributes {
+  /** Base ingredient name before refinement, e.g. "chicken thighs" */
+  baseName: string
+  /** Structured options the user selected, e.g. ["Boneless", "Skinless"] */
+  selectedOptions: string[]
+}
+
 export interface PlanSettings {
   radiusMiles: number
   maxStores: number

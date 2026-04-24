@@ -189,6 +189,11 @@ export interface ClarificationRequest {
   options: string[]
 }
 
+export interface ClarifiedAttributes {
+  baseName: string
+  selectedOptions: string[]
+}
+
 export type PriceSource = 'kroger_api' | 'walmart_api' | 'ai_estimated'
 export type Confidence = 'real' | 'estimated_with_source' | 'estimated'
 
