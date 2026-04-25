@@ -25,4 +25,12 @@ describe('buildSearchQuery', () => {
     expect(buildSearchQuery('organic milk', ['Organic', 'Whole']))
       .toBe('whole organic milk')
   })
+
+  it('returns baseName when selectedOptions is undefined (defensive)', () => {
+    expect(buildSearchQuery('chicken thighs', undefined)).toBe('chicken thighs')
+  })
+
+  it('returns baseName when selectedOptions is null (defensive)', () => {
+    expect(buildSearchQuery('chicken thighs', null)).toBe('chicken thighs')
+  })
 })

@@ -460,8 +460,14 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   const ingredients = body.ingredients.map(i => ({
     ...i,
     name: (() => {
-      const clar = body.resolvedClarifications?.[i.id]
-      if (clar) return buildSearchQuery(clar.baseName || i.name, clar.selectedOptions)
+      const clar = body.resolvedClarifications?.[i.id] as unknown
+      // Legacy SPA bundles sent a flattened string here; tolerate that shape so
+      // a stale browser tab doesn't crash the worker after the structured rollout.
+      if (typeof clar === 'string' && clar.length > 0) return clar
+      if (clar && typeof clar === 'object') {
+        const c = clar as { baseName?: string; selectedOptions?: string[] }
+        return buildSearchQuery(c.baseName || i.name, c.selectedOptions)
+      }
       return i.clarifiedName ?? i.name
     })()
   }))

@@ -3,10 +3,10 @@
  * user-selected clarification options. Options are prepended as adjectives
  * and sanitized so store search APIs tokenize them correctly.
  */
-export function buildSearchQuery(baseName: string, selectedOptions: string[]): string {
+export function buildSearchQuery(baseName: string, selectedOptions: string[] | undefined | null): string {
   const sanitize = (s: string) => s.replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim()
   const cleanBase = sanitize(baseName)
-  if (selectedOptions.length === 0) return cleanBase
+  if (!Array.isArray(selectedOptions) || selectedOptions.length === 0) return cleanBase
 
   const baseTokens = new Set(cleanBase.toLowerCase().split(/\s+/))
   const prefixTokens: string[] = []
