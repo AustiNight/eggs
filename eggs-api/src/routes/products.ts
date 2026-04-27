@@ -15,7 +15,12 @@ products.get('/search', requireAuth, rateLimit, async (c) => {
     return c.json({ error: 'q and locationId are required' }, 400)
   }
 
-  const kroger = new KrogerClient(c.env.KROGER_CLIENT_ID, c.env.KROGER_CLIENT_SECRET)
+  const kroger = new KrogerClient(
+    c.env.KROGER_CLIENT_ID,
+    c.env.KROGER_CLIENT_SECRET,
+    undefined,
+    c.env.URL_CACHE
+  )
   const results = await kroger.searchProducts(q, locationId)
   return c.json({ products: results })
 })

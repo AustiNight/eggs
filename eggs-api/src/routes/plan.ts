@@ -476,7 +476,12 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   let krogerClient: KrogerClient | null = null
   let krogerLocations: KrogerLocation[] = []
   if (c.env.KROGER_CLIENT_ID && c.env.KROGER_CLIENT_SECRET) {
-    krogerClient = new KrogerClient(c.env.KROGER_CLIENT_ID, c.env.KROGER_CLIENT_SECRET)
+    krogerClient = new KrogerClient(
+      c.env.KROGER_CLIENT_ID,
+      c.env.KROGER_CLIENT_SECRET,
+      undefined,
+      c.env.URL_CACHE
+    )
     krogerLocations = await krogerClient
       .findNearbyLocations(body.location.lat, body.location.lng, body.settings.radiusMiles)
       .catch(() => [])

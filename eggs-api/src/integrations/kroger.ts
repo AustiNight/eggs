@@ -6,6 +6,9 @@ import { stripUnitNoise } from '../lib/queryStrip.js'
 
 const KROGER_BASE = 'https://api.kroger.com/v1'
 
+const TOKEN_KV_KEY = 'kroger:token'
+const LOCATIONS_TTL_SECONDS = 300
+
 export class KrogerClient implements StoreAdapter {
   private accessToken: string | null = null
   private tokenExpiry = 0
@@ -16,12 +19,24 @@ export class KrogerClient implements StoreAdapter {
     /** Optional fetch override — used in tests to avoid real network calls.
      *  Arrow wrapper avoids "Illegal invocation" on Cloudflare Workers when
      *  the default unbound `globalThis.fetch` is called as a method. */
-    private fetchImpl: typeof fetch = (input, init) => fetch(input, init)
+    private fetchImpl: typeof fetch = (input, init) => fetch(input, init),
+    /** Optional KV namespace for cross-invocation token + locations caching.
+     *  Skipping it falls back to per-instance in-memory token caching only. */
+    private kv?: KVNamespace
   ) {}
 
   private async getToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.tokenExpiry) {
       return this.accessToken
+    }
+
+    if (this.kv) {
+      const cached = await this.kv.get<{ accessToken: string; expiry: number }>(TOKEN_KV_KEY, 'json')
+      if (cached && Date.now() < cached.expiry) {
+        this.accessToken = cached.accessToken
+        this.tokenExpiry = cached.expiry
+        return cached.accessToken
+      }
     }
 
     const creds = btoa(`${this.clientId}:${this.clientSecret}`)
@@ -45,6 +60,16 @@ export class KrogerClient implements StoreAdapter {
     }
     this.accessToken = data.access_token
     this.tokenExpiry = Date.now() + (data.expires_in - 60) * 1000
+
+    if (this.kv) {
+      const ttlSeconds = Math.max(60, data.expires_in - 60)
+      await this.kv.put(
+        TOKEN_KV_KEY,
+        JSON.stringify({ accessToken: this.accessToken, expiry: this.tokenExpiry }),
+        { expirationTtl: ttlSeconds }
+      )
+    }
+
     return this.accessToken
   }
 
@@ -72,11 +97,21 @@ export class KrogerClient implements StoreAdapter {
     lng: number,
     radiusMiles: number
   ): Promise<KrogerLocation[]> {
+    const cappedRadius = Math.min(radiusMiles, 100)
+    const cacheKey = this.kv
+      ? `kroger:locations:${lat.toFixed(2)}:${lng.toFixed(2)}:${cappedRadius}`
+      : null
+
+    if (cacheKey && this.kv) {
+      const cached = await this.kv.get<KrogerLocation[]>(cacheKey, 'json')
+      if (cached) return cached
+    }
+
     const token = await this.getToken()
     const params = new URLSearchParams({
       'filter.lat.near': String(lat),
       'filter.lon.near': String(lng),
-      'filter.radiusInMiles': String(Math.min(radiusMiles, 100)),
+      'filter.radiusInMiles': String(cappedRadius),
       'filter.limit': '5'
     })
     const res = await this.fetchImpl(`${KROGER_BASE}/locations?${params}`, {
@@ -84,7 +119,13 @@ export class KrogerClient implements StoreAdapter {
     })
     if (!res.ok) return []
     const data = await res.json() as { data?: KrogerLocation[] }
-    return data.data ?? []
+    const locations = data.data ?? []
+
+    if (cacheKey && this.kv && locations.length > 0) {
+      await this.kv.put(cacheKey, JSON.stringify(locations), { expirationTtl: LOCATIONS_TTL_SECONDS })
+    }
+
+    return locations
   }
 
   /**
@@ -113,8 +154,10 @@ export class KrogerClient implements StoreAdapter {
       ? [stripped, name]
       : [name]
 
-    // Collect all candidates from the entire cascade (all locations × all queries).
-    // We need to know the locationId each candidate came from.
+    // First-hit-only cascade: try each location with the stripped→raw fallback,
+    // but stop iterating remaining locations once any has yielded candidates.
+    // Cross-location redundancy isn't worth the per-ingredient subrequest cost
+    // (see plan 2026-04-26).
     const candidates: Array<{ product: KrogerProduct; locationId: string; query: string }> = []
 
     for (const locationId of locations) {
@@ -125,11 +168,11 @@ export class KrogerClient implements StoreAdapter {
           candidates.push({ product: p, locationId, query })
         }
         // Stripped query succeeded for this location — skip the raw fallback.
-        // Consistent with the original cascade: stripped wins when it yields results.
         if (priced.length > 0 && query === queries[0] && queries.length > 1) {
           break
         }
       }
+      if (candidates.length > 0) break
     }
 
     if (!candidates.length) {

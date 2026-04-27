@@ -111,7 +111,12 @@ clarify.post('/', requireAuth, rateLimit, async (c) => {
     // gracefully returns null when locationIds is empty.
     // For a real location-aware pre-search, callers can pass a location in the
     // body (future milestone).
-    storeAdapters.push(new KrogerClient(c.env.KROGER_CLIENT_ID, c.env.KROGER_CLIENT_SECRET))
+    storeAdapters.push(new KrogerClient(
+      c.env.KROGER_CLIENT_ID,
+      c.env.KROGER_CLIENT_SECRET,
+      undefined,
+      c.env.URL_CACHE
+    ))
   }
 
   if (

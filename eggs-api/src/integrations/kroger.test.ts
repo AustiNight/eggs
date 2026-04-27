@@ -155,8 +155,9 @@ describe('KrogerClient.search — cascade integration', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
-  it('cascades through multiple locations when primary has no priced match', async () => {
-    // loc-1 returns empty; loc-2 returns a product
+  it('first-hit-only: stops iterating remaining locations once any has yielded candidates', async () => {
+    // loc-1 returns a product; loc-2 must NOT be queried at all (subrequest savings).
+    const queriedLocations: string[] = []
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/connect/oauth2/token')) {
@@ -164,7 +165,37 @@ describe('KrogerClient.search — cascade integration', () => {
       }
       if (url.includes('/products')) {
         const u = new URL(url)
-        const locationId = u.searchParams.get('filter.locationId')
+        const locationId = u.searchParams.get('filter.locationId') ?? '?'
+        queriedLocations.push(locationId)
+        if (locationId === 'loc-1') {
+          return new Response(JSON.stringify(makeSearchResponse([
+            makeProduct({ productId: 'p1', description: 'Milk', brand: 'Kroger', price: 3.49, size: '64 oz' })
+          ])), { status: 200 })
+        }
+        return new Response(JSON.stringify(makeSearchResponse([])), { status: 200 })
+      }
+      return new Response('not found', { status: 404 })
+    }) as unknown as typeof fetch
+    const client = new KrogerClient('id', 'secret', fetchMock)
+    const result = await client.search({ name: 'milk', locationIds: ['loc-1', 'loc-2'] })
+    expect(result).not.toBeNull()
+    expect(result!.matchedLocationId).toBe('loc-1')
+    expect(queriedLocations).toEqual(['loc-1'])
+  })
+
+  it('first-hit-only: falls through to loc-2 when loc-1 has zero priced matches', async () => {
+    // Trimming to first-hit doesn't mean "primary only" — it means "first
+    // location with results wins." When loc-1 is empty, we should still try loc-2.
+    const queriedLocations: string[] = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/connect/oauth2/token')) {
+        return new Response(JSON.stringify(makeTokenResponse()), { status: 200 })
+      }
+      if (url.includes('/products')) {
+        const u = new URL(url)
+        const locationId = u.searchParams.get('filter.locationId') ?? '?'
+        queriedLocations.push(locationId)
         if (locationId === 'loc-2') {
           return new Response(JSON.stringify(makeSearchResponse([
             makeProduct({ productId: 'p1', description: 'Milk', brand: 'Kroger', price: 3.49, size: '64 oz' })
@@ -178,6 +209,68 @@ describe('KrogerClient.search — cascade integration', () => {
     const result = await client.search({ name: 'milk', locationIds: ['loc-1', 'loc-2'] })
     expect(result).not.toBeNull()
     expect(result!.matchedLocationId).toBe('loc-2')
+    expect(queriedLocations).toEqual(['loc-1', 'loc-2'])
+  })
+})
+
+// Minimal in-memory KVNamespace stub for caching tests.
+function makeKvStub(): { kv: KVNamespace; store: Map<string, string> } {
+  const store = new Map<string, string>()
+  const kv = {
+    get: vi.fn(async (key: string, type?: string) => {
+      const raw = store.get(key)
+      if (raw === undefined) return null
+      return type === 'json' ? JSON.parse(raw) : raw
+    }),
+    put: vi.fn(async (key: string, value: string) => { store.set(key, value) }),
+    delete: vi.fn(async (key: string) => { store.delete(key) }),
+    list: vi.fn(async () => ({ keys: [], list_complete: true, cacheStatus: null })),
+  } as unknown as KVNamespace
+  return { kv, store }
+}
+
+describe('KrogerClient — KV caching of token + locations', () => {
+  it('reuses cached token across new client instances', async () => {
+    const { kv } = makeKvStub()
+    const fetchMock = makeFetchMock({ 'milk': [makeProduct({ productId: 'p1', description: 'Milk', price: 3.49 })] })
+    const client1 = new KrogerClient('id', 'secret', fetchMock, kv)
+    await client1.search({ name: 'milk', locationIds: ['loc-1'] })
+    const tokenCallsAfterFirst = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(c => String(c[0]).includes('/connect/oauth2/token')).length
+    expect(tokenCallsAfterFirst).toBe(1)
+
+    // Second client (simulating a new request invocation) — should hit KV, not fetch a new token.
+    const client2 = new KrogerClient('id', 'secret', fetchMock, kv)
+    await client2.search({ name: 'milk', locationIds: ['loc-1'] })
+    const tokenCallsAfterSecond = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(c => String(c[0]).includes('/connect/oauth2/token')).length
+    expect(tokenCallsAfterSecond).toBe(1)
+  })
+
+  it('reuses cached locations for the same lat/lng/radius', async () => {
+    const { kv } = makeKvStub()
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/connect/oauth2/token')) {
+        return new Response(JSON.stringify(makeTokenResponse()), { status: 200 })
+      }
+      if (url.includes('/locations')) {
+        return new Response(JSON.stringify({ data: [{ locationId: 'loc-1', name: 'Kroger Foo', address: { addressLine1: '1 Main', city: 'X', state: 'TX' } }] }), { status: 200 })
+      }
+      return new Response('not found', { status: 404 })
+    }) as unknown as typeof fetch
+    const client1 = new KrogerClient('id', 'secret', fetchMock, kv)
+    await client1.findNearbyLocations(32.7767, -96.7970, 10)
+    const locCallsAfterFirst = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(c => String(c[0]).includes('/locations')).length
+    expect(locCallsAfterFirst).toBe(1)
+
+    const client2 = new KrogerClient('id', 'secret', fetchMock, kv)
+    const result2 = await client2.findNearbyLocations(32.7767, -96.7970, 10)
+    const locCallsAfterSecond = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(c => String(c[0]).includes('/locations')).length
+    expect(locCallsAfterSecond).toBe(1)
+    expect(result2).toHaveLength(1)
   })
 })
 
