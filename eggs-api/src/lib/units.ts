@@ -121,6 +121,34 @@ const UNIT_ALIASES: Record<string, CanonicalUnit> = {
 }
 
 /**
+ * Convert a quantity from a free-text unit string to another free-text unit string.
+ *
+ * Accepts the same aliases as UNIT_ALIASES (e.g. "lbs", "Each", "fl oz").
+ * Returns null when:
+ *   - either unit string is unrecognised
+ *   - the units belong to different base dimensions (mass vs volume vs count)
+ *
+ * Examples:
+ *   convertQuantity(1, 'lb', 'oz')     → 16
+ *   convertQuantity(1, 'oz', 'g')      → ~28.35
+ *   convertQuantity(1, 'lb', 'fl oz')  → null  (mass vs volume)
+ *   convertQuantity(1, 'lbs', 'grams') → ~453.59
+ *   convertQuantity(1, 'Each', 'ea')   → 1
+ */
+export function convertQuantity(
+  value: number,
+  fromUnit: string,
+  toUnit: string,
+): number | null {
+  const fromKey = fromUnit.trim().toLowerCase()
+  const toKey = toUnit.trim().toLowerCase()
+  const from = UNIT_ALIASES[fromKey]
+  const to = UNIT_ALIASES[toKey]
+  if (!from || !to) return null
+  return convert(value, from, to)
+}
+
+/**
  * Parse a store-returned size string into a { quantity, unit } pair.
  *
  * Handles:

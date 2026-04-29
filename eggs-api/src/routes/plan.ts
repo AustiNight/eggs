@@ -14,7 +14,7 @@ import type {
 import { CANONICAL_UNITS, validateSpecInput } from '../types/spec.js'
 import type { ShoppableItemSpec } from '../types/spec.js'
 import { computeBestBasketTotal, extractSpecs } from '../lib/planTotals.js'
-import { parseSize } from '../lib/units.js'
+import { parseSize, convertQuantity } from '../lib/units.js'
 import { selectWinner } from '../lib/bestValue.js'
 import { buildSearchQuery } from '../lib/query-builder.js'
 import type { WinnerResult } from '../lib/bestValue.js'
@@ -40,6 +40,40 @@ import { buildNarrativePrompt, fallbackNarrative } from './plan-narrative.js'
 import type { NarrativeFacts } from './plan-narrative.js'
 
 const plan = new Hono<HonoEnv>()
+
+// ── Line-total helper (Option A: user-quantity-driven) ───────────────────────
+//
+// Returns the amount the user actually pays to obtain their requested quantity.
+//
+//   packagesNeeded = ceil(ingredientQtyInPkgUnits / pricedSize.quantity)
+//   lineTotal      = unitPrice × packagesNeeded
+//
+// Falls back to unitPrice × 1 when:
+//   - pricedSize is null (no size parsed from the product string)
+//   - units are in different dimensions (e.g. "each" spec vs mass package)
+//
+// The ingredient unit comes as free text from the frontend and is resolved via
+// UNIT_ALIASES inside convertQuantity.  The pricedSize unit comes from parseSize
+// which already returns a CanonicalUnit.
+export function computeLineTotal(
+  unitPrice: number,
+  ingredient: { quantity: number; unit: string },
+  pricedSize: { quantity: number; unit: string } | null,
+): number {
+  if (!pricedSize) return Math.round(unitPrice * 100) / 100
+
+  const qtyInPkgUnits = convertQuantity(
+    ingredient.quantity,
+    ingredient.unit,
+    pricedSize.unit,
+  )
+
+  // Dimension mismatch (e.g. count spec vs mass package) — buy 1 package
+  if (qtyInPkgUnits === null) return Math.round(unitPrice * 100) / 100
+
+  const packagesNeeded = Math.max(1, Math.ceil(qtyInPkgUnits / pricedSize.quantity))
+  return Math.round(unitPrice * packagesNeeded * 100) / 100
+}
 
 // ── Cache helpers ────────────────────────────────────────────────────────────
 // Cache key shape: item:v1:{banner-slug}:{sha256(ingredient)}
@@ -611,6 +645,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
       const kr = krogerResult.items[ingredient.id]
       if (kr) {
         const effectivePrice = kr.promoPrice ?? kr.regularPrice
+        const krPricedSize = parseSize(kr.size) ?? null
         krogerItems.push({
           ingredientId: ingredient.id,
           name: kr.name,
@@ -618,14 +653,14 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           quantity: ingredient.quantity,
           unit: ingredient.unit,
           unitPrice: effectivePrice,
-          lineTotal: Math.round(effectivePrice * ingredient.quantity * 100) / 100,
+          lineTotal: computeLineTotal(effectivePrice, ingredient, krPricedSize),
           confidence: 'real',
           shopUrl: kr.productUrl,
           productUrl: kr.productUrl,
           proofUrl: kr.productUrl,
           isLoyaltyPrice: kr.promoPrice !== null && kr.promoPrice < kr.regularPrice,
           nonMemberPrice: kr.promoPrice !== null ? kr.regularPrice : undefined,
-          pricedSize: parseSize(kr.size) ?? null
+          pricedSize: krPricedSize
         })
       } else {
         krogerItems.push({
@@ -676,6 +711,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
       const wm = walmartResult[ingredient.id]
       if (wm) {
         const effectivePrice = wm.promoPrice ?? wm.regularPrice
+        const wmPricedSize = parseSize(wm.size) ?? null
         walmartItems.push({
           ingredientId: ingredient.id,
           name: wm.name,
@@ -683,14 +719,14 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           quantity: ingredient.quantity,
           unit: ingredient.unit,
           unitPrice: effectivePrice,
-          lineTotal: Math.round(effectivePrice * ingredient.quantity * 100) / 100,
+          lineTotal: computeLineTotal(effectivePrice, ingredient, wmPricedSize),
           confidence: 'real',
           shopUrl: wm.productUrl,
           productUrl: wm.productUrl,
           proofUrl: wm.productUrl,
           isLoyaltyPrice: wm.promoPrice !== null && wm.promoPrice < wm.regularPrice,
           nonMemberPrice: wm.promoPrice !== null ? wm.regularPrice : undefined,
-          pricedSize: parseSize(wm.size) ?? null
+          pricedSize: wmPricedSize
         })
       } else {
         walmartItems.push({

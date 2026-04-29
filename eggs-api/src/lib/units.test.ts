@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { convert, toBase, pricePerBase, parseSize, BASE_DIMENSION } from './units.js'
+import { convert, toBase, pricePerBase, parseSize, convertQuantity, BASE_DIMENSION } from './units.js'
 import type { CanonicalUnit } from '../types/index.js'
 
 // ─── BASE_DIMENSION ───────────────────────────────────────────────────────────
@@ -194,5 +194,55 @@ describe('parseSize()', () => {
   })
   it('returns null for count multi-unit "1 dozen 6 each" — count is not a CanonicalUnit', () => {
     expect(parseSize('1 dozen 6 each')).toBeNull()
+  })
+})
+
+// ─── convertQuantity() ────────────────────────────────────────────────────────
+
+describe('convertQuantity() — same-dimension conversions', () => {
+  it('1 lb → oz = 16', () => {
+    expect(convertQuantity(1, 'lb', 'oz')).toBeCloseTo(16, 3)
+  })
+  it('1 oz → g ≈ 28.35', () => {
+    expect(convertQuantity(1, 'oz', 'g')).toBeCloseTo(28.3495, 3)
+  })
+  it('same unit → same value (1 oz → oz)', () => {
+    expect(convertQuantity(1, 'oz', 'oz')).toBeCloseTo(1, 3)
+  })
+  it('free-text alias: "lbs" → "grams"', () => {
+    expect(convertQuantity(1, 'lbs', 'grams')).toBeCloseTo(453.592, 2)
+  })
+  it('free-text alias: case-insensitive "Each" → "ea"', () => {
+    expect(convertQuantity(1, 'Each', 'ea')).toBeCloseTo(1, 3)
+  })
+  it('1 dozen → each = 12', () => {
+    expect(convertQuantity(1, 'dozen', 'each')).toBeCloseTo(12, 3)
+  })
+  it('1 cup → fl oz ≈ 8', () => {
+    expect(convertQuantity(1, 'cup', 'fl oz')).toBeCloseTo(8, 2)
+  })
+})
+
+describe('convertQuantity() — cross-dimension returns null', () => {
+  it('mass → volume: 1 lb → fl oz = null', () => {
+    expect(convertQuantity(1, 'lb', 'fl oz')).toBeNull()
+  })
+  it('volume → mass: 1 ml → g = null', () => {
+    expect(convertQuantity(1, 'ml', 'g')).toBeNull()
+  })
+  it('count → mass: 1 each → oz = null', () => {
+    expect(convertQuantity(1, 'each', 'oz')).toBeNull()
+  })
+})
+
+describe('convertQuantity() — unknown unit returns null', () => {
+  it('unknown fromUnit → null', () => {
+    expect(convertQuantity(1, 'furlong', 'oz')).toBeNull()
+  })
+  it('unknown toUnit → null', () => {
+    expect(convertQuantity(1, 'lb', 'smidgen')).toBeNull()
+  })
+  it('both unknown → null', () => {
+    expect(convertQuantity(1, 'furlong', 'smidgen')).toBeNull()
   })
 })

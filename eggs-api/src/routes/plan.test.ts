@@ -33,7 +33,7 @@ vi.mock('../providers/index.js', () => ({
 
 import { getSupabase } from '../db/client.js'
 import * as krogerMod from '../integrations/kroger.js'
-import plan from './plan.js'
+import plan, { computeLineTotal } from './plan.js'
 
 // ── Shared test helpers ───────────────────────────────────────────────────────
 
@@ -229,5 +229,48 @@ describe('/api/price-plan — structured clarifications reach KrogerClient', () 
     expect(mockGetPriceForIngredient).toHaveBeenCalled()
     const firstCallQuery = mockGetPriceForIngredient.mock.calls[0][0] as string
     expect(firstCallQuery).toBe('boneless skinless chicken thighs')
+  })
+})
+
+// ─── computeLineTotal() — unit tests ─────────────────────────────────────────
+//
+// Verifies the Option-A "packages needed" formula:
+//   lineTotal = unitPrice × ceil(ingredientQtyInPkgUnits / pricedSize.quantity)
+// clamped to a minimum of 1 package.
+
+describe('computeLineTotal() — packages-needed formula', () => {
+  it('1 lb grapes priced as 1-lb package at $2.49 → $2.49 (1 package)', () => {
+    expect(computeLineTotal(2.49, { quantity: 1, unit: 'lb' }, { quantity: 1, unit: 'lb' })).toBe(2.49)
+  })
+
+  it('12 kiwis priced as 6-each package at $5.49 → $10.98 (2 packages, ceil)', () => {
+    expect(computeLineTotal(5.49, { quantity: 12, unit: 'each' }, { quantity: 6, unit: 'each' })).toBeCloseTo(10.98, 2)
+  })
+
+  it('1 kiwi priced as 6-each package at $5.49 → $5.49 (1 package, no fractional purchase)', () => {
+    expect(computeLineTotal(5.49, { quantity: 1, unit: 'each' }, { quantity: 6, unit: 'each' })).toBe(5.49)
+  })
+
+  it('5 lb ground beef priced as 1-lb package at $4.50 → $22.50 (5 packages)', () => {
+    expect(computeLineTotal(4.50, { quantity: 5, unit: 'lb' }, { quantity: 1, unit: 'lb' })).toBe(22.50)
+  })
+
+  it('cross-dimension mismatch (count spec vs mass package) → unitPrice × 1 (fallback)', () => {
+    // user says "each", package is priced in oz — dimension mismatch → buy 1
+    expect(computeLineTotal(2.49, { quantity: 1, unit: 'each' }, { quantity: 16, unit: 'oz' })).toBe(2.49)
+  })
+
+  it('pricedSize null → unitPrice × 1 (defensive fallback)', () => {
+    expect(computeLineTotal(3.99, { quantity: 2, unit: 'lb' }, null)).toBe(3.99)
+  })
+
+  it('cross-unit same dimension: 16 oz ingredient priced in 1-lb package → $4.50 (1 package)', () => {
+    // 16 oz = 1 lb → ceil(1 / 1) = 1
+    expect(computeLineTotal(4.50, { quantity: 16, unit: 'oz' }, { quantity: 1, unit: 'lb' })).toBe(4.50)
+  })
+
+  it('cents are stable (no floating-point drift)', () => {
+    // 3 × $1.33 = 3.99 exactly via Math.round
+    expect(computeLineTotal(1.33, { quantity: 3, unit: 'each' }, { quantity: 1, unit: 'each' })).toBe(3.99)
   })
 })
