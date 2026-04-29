@@ -22,15 +22,24 @@ const NOISE_WORDS = new Set([
   'pt', 'pint', 'pints', 'cup', 'cups',
   'tbsp', 'tablespoon', 'tsp', 'teaspoon',
   'dozen', 'dozens',
+  'each', 'ea', 'piece', 'pieces', 'count', 'ct', 'item', 'items',
   // Intentionally NOT stripped: 'fresh', 'organic', 'whole' — these are
   // product-selecting modifiers, not packaging noise.
 ])
 
 export function stripUnitNoise(raw: string): string {
-  return raw
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(w => w.length > 0 && !/^\d/.test(w) && !NOISE_WORDS.has(w))
-    .join(' ')
-    .trim()
+  const tokens = raw.toLowerCase().split(/\s+/).filter(w => w.length > 0)
+  const stripped = tokens.filter(w => !/^\d/.test(w) && !NOISE_WORDS.has(w))
+  // Backoff: if full strip leaves < 2 meaningful tokens but the original had
+  // ≥ 2 non-numeric tokens, preserve the noise word — it's load-bearing here
+  // (e.g., "gallons milk", "loaf bread"). Strip only the leading numeric prefix.
+  // Only applies when there are no numeric tokens — if a numeric was present,
+  // the query is measurement-qualified and the full strip is intentional
+  // (e.g., "1 head garlic" → "garlic", not "head garlic").
+  const nonNumeric = tokens.filter(w => !/^\d/.test(w))
+  const hasNumeric = nonNumeric.length < tokens.length
+  if (!hasNumeric && stripped.length < 2 && nonNumeric.length >= 2) {
+    return nonNumeric.join(' ').trim()
+  }
+  return stripped.join(' ').trim()
 }
