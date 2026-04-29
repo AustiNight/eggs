@@ -19,6 +19,20 @@ import { COUNTABLES } from '../data/countables.js'
 
 const PPB_PRECISION = 10_000   // 4 decimal places for price-per-base comparisons
 
+/**
+ * Synthetic pricePerBase multiplier applied when size is unparseable or unit
+ * dimensions don't match (and no countable fallback applies).
+ *
+ * Multiplying lineTotal by 1000 produces a value large enough that any
+ * legitimately-priced candidate at any reasonable grocery price will
+ * sort above it (e.g. $0.001/g confident vs $5/g fallback is a 200× gap),
+ * while still keeping pricePerBase non-null so the candidate survives the
+ * pricedCandidates filter and remains eligible.
+ *
+ * INTERIM (replaced by Phase 2 size-resolver Task 5): see plan 2026-04-29.
+ */
+const FALLBACK_PPB_PENALTY = 1000
+
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export interface Candidate {
@@ -135,7 +149,17 @@ function buildCandidate(
     item.pricedSize ?? parseSize(item.unit ?? '')
 
   if (!effectiveSize) {
-    return { ...base, parsedSize: null, pricePerBase: null, excludeReason: 'size_unparseable' }
+    // INTERIM (replaced by Phase 2 size-resolver Task 5): see plan 2026-04-29.
+    // Size could not be parsed — assign a synthetic fallback pricePerBase so this
+    // candidate is NOT silently dropped at the pricedCandidates filter. The large
+    // penalty value pushes it to the bottom of price-asc ranking behind any
+    // candidate with a confident pricePerBase.
+    return {
+      ...base,
+      parsedSize: null,
+      pricePerBase: item.lineTotal * FALLBACK_PPB_PENALTY,
+      excludeReason: 'size_unparseable',
+    }
   }
 
   // Direct pricePerBase (same base dimension)
@@ -157,11 +181,25 @@ function buildCandidate(
       return { ...base, parsedSize: effectiveSize, pricePerBase: fallbackPpb }
     }
 
-    return { ...base, parsedSize: effectiveSize, pricePerBase: null, excludeReason: 'unit_mismatch' }
+    // INTERIM (replaced by Phase 2 size-resolver Task 5): see plan 2026-04-29.
+    // Unit dimension doesn't match spec and no countable cross-conversion applies.
+    // Use synthetic fallback so candidate survives pricedCandidates filter.
+    return {
+      ...base,
+      parsedSize: effectiveSize,
+      pricePerBase: item.lineTotal * FALLBACK_PPB_PENALTY,
+      excludeReason: 'unit_mismatch',
+    }
   }
 
   // computePricePerBase returned null — zero or missing quantity
-  return { ...base, parsedSize: effectiveSize, pricePerBase: null, excludeReason: 'size_unparseable' }
+  // INTERIM (replaced by Phase 2 size-resolver Task 5): see plan 2026-04-29.
+  return {
+    ...base,
+    parsedSize: effectiveSize,
+    pricePerBase: item.lineTotal * FALLBACK_PPB_PENALTY,
+    excludeReason: 'size_unparseable',
+  }
 }
 
 /**

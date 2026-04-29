@@ -330,9 +330,11 @@ describe('selectWinner — countable Case B with natural lb unit (no pre-convers
   })
 })
 
-describe('selectWinner — unit mismatch for non-countable item → excluded', () => {
-  it('excludes the candidate with unit_mismatch when no countable entry exists', () => {
-    // spec.unit = 'g' (mass), store item = each → item is "motor oil" — not a countable
+describe('selectWinner — unit mismatch for non-countable item → ranked low with fallback, not excluded', () => {
+  it('keeps the candidate with unit_mismatch using synthetic fallback pricePerBase (P1.4 contract)', () => {
+    // spec.unit = 'g' (mass), store item = each → item is "motor oil" — not a countable.
+    // Old behavior: winner === null (candidate silently dropped).
+    // New behavior: candidate survives with synthetic pricePerBase, winner is non-null.
     const spec = makeSpec({
       id: 'oil-1',
       displayName: 'motor oil',
@@ -350,9 +352,14 @@ describe('selectWinner — unit mismatch for non-countable item → excluded', (
     const store = makeStore({ storeName: 'Walmart', items: [item] })
     const result = selectWinner(spec, [store], noUser)
 
-    expect(result.winner).toBeNull()
+    // Candidate is NOT dropped — winner is non-null under new P1.4 contract
+    expect(result.winner).not.toBeNull()
     const candidate = result.allCandidates[0]
+    // Diagnostic still preserved
     expect(candidate.excludeReason).toBe('unit_mismatch')
+    // Synthetic fallback pricePerBase is non-null
+    expect(candidate.pricePerBase).not.toBeNull()
+    expect(candidate.pricePerBase).toBe(8.99 * 1000)
   })
 })
 
@@ -399,8 +406,10 @@ describe('selectWinner — notAvailable items filtered out', () => {
   })
 })
 
-describe('selectWinner — unparseable size string', () => {
-  it('excludes candidate with size_unparseable when unit cannot be parsed', () => {
+describe('selectWinner — unparseable size string → ranked low with fallback, not excluded', () => {
+  it('keeps candidate with size_unparseable using synthetic fallback pricePerBase (P1.4 contract)', () => {
+    // Old behavior: winner === null (candidate silently dropped).
+    // New behavior: candidate survives with synthetic pricePerBase, winner is non-null.
     const spec = makeSpec({ id: 'widget-1', unit: 'g' })
 
     const item = makeItem({ ingredientId: 'widget-1', name: 'Mystery Item', unit: 'one giant tub', lineTotal: 5.00 })
@@ -408,8 +417,14 @@ describe('selectWinner — unparseable size string', () => {
 
     const result = selectWinner(spec, [store], noUser)
 
-    expect(result.winner).toBeNull()
-    expect(result.allCandidates[0].excludeReason).toBe('size_unparseable')
+    // Candidate is NOT dropped — winner is non-null under new P1.4 contract
+    expect(result.winner).not.toBeNull()
+    const candidate = result.allCandidates[0]
+    // Diagnostic still preserved
+    expect(candidate.excludeReason).toBe('size_unparseable')
+    // Synthetic fallback pricePerBase is non-null
+    expect(candidate.pricePerBase).not.toBeNull()
+    expect(candidate.pricePerBase).toBe(5.00 * 1000)
   })
 })
 
@@ -611,5 +626,113 @@ describe('selectWinner regression — winners populate when candidates exist', (
     expect(result.winner?.storeName).toBe('Kroger')
     // Single candidate becomes the winner; no alternatives remain
     expect(result.eligibleCandidates).toHaveLength(0)
+  })
+})
+
+// ─── P1.4: no-silent-drop fallback tests ──────────────────────────────────────
+
+describe('selectWinner — size_unparseable candidates rank low instead of being dropped', () => {
+  it('candidates with size_unparseable are not silently dropped — they rank but rank below confident candidates', () => {
+    // spec: 1 lb of grapes
+    // Two candidates: confident ($2.00/lb, parsedSize OK) and unparseable ($1.50, "Family Size")
+    // Expectation: BOTH appear in allCandidates, winner is non-null (confident candidate)
+    const spec = makeSpec({ id: 'grapes-1', displayName: 'grapes', unit: 'lb' })
+
+    const confidentItem = makeItem({
+      ingredientId: 'grapes-1',
+      name: 'Grapes 2 lb bag',
+      unit: '2 lb',
+      lineTotal: 4.00,
+      unitPrice: 2.00,
+    })
+    const unparseableItem = makeItem({
+      ingredientId: 'grapes-1',
+      name: 'Grapes Family Size',
+      unit: 'Family Size',    // parseSize returns null for this
+      lineTotal: 3.00,
+      unitPrice: 3.00,
+    })
+
+    const confidentStore = makeStore({ storeName: 'Kroger', distanceMiles: 1.0, items: [confidentItem] })
+    const unparseableStore = makeStore({ storeName: 'Walmart', distanceMiles: 1.5, items: [unparseableItem] })
+
+    const result = selectWinner(spec, [confidentStore, unparseableStore], noUser)
+
+    // Critical: winner is non-null (the bug caused winner to be null)
+    expect(result.winner).not.toBeNull()
+    // The confident candidate wins (lower effective pricePerBase)
+    expect(result.winner!.storeName).toBe('Kroger')
+    // Both candidates present in allCandidates
+    expect(result.allCandidates).toHaveLength(2)
+    // The unparseable candidate still has size_unparseable diagnostic
+    const unparseable = result.allCandidates.find((c) => c.storeName === 'Walmart')
+    expect(unparseable).toBeDefined()
+    expect(unparseable!.excludeReason).toBe('size_unparseable')
+    // But it is NOT excluded — pricePerBase is non-null (synthetic fallback)
+    expect(unparseable!.pricePerBase).not.toBeNull()
+    // And its pricePerBase is larger than the confident one (ranks below)
+    expect(unparseable!.pricePerBase!).toBeGreaterThan(result.winner!.pricePerBase!)
+  })
+})
+
+describe('selectWinner — unit_mismatch candidates rank low instead of being dropped', () => {
+  it('candidates with unit_mismatch are not silently dropped', () => {
+    // spec wants mass (g), candidate has count (each) for a non-countable item → unit_mismatch
+    // The candidate should survive with fallback pricePerBase, not be excluded
+    const spec = makeSpec({ id: 'oil-1', displayName: 'motor oil', unit: 'g' })
+
+    const mismatchItem = makeItem({
+      ingredientId: 'oil-1',
+      name: 'Motor Oil',
+      unit: '1 each',
+      lineTotal: 8.99,
+      unitPrice: 8.99,
+    })
+
+    const store = makeStore({ storeName: 'Walmart', distanceMiles: 1.0, items: [mismatchItem] })
+    const result = selectWinner(spec, [store], noUser)
+
+    // Critical: winner is non-null (was null before the fix)
+    expect(result.winner).not.toBeNull()
+    expect(result.allCandidates).toHaveLength(1)
+    const candidate = result.allCandidates[0]
+    // Diagnostic preserved
+    expect(candidate.excludeReason).toBe('unit_mismatch')
+    // But pricePerBase is non-null (synthetic fallback) — candidate was NOT dropped
+    expect(candidate.pricePerBase).not.toBeNull()
+  })
+})
+
+describe('selectWinner — all candidates size_unparseable → winner is cheapest by raw unitPrice', () => {
+  it('when ALL candidates are size_unparseable, selectWinner still returns a winner (the cheapest by raw lineTotal)', () => {
+    // 2 candidates, both "Family Size"; one $5, one $7. Winner should be the $5 one.
+    const spec = makeSpec({ id: 'grapes-2', displayName: 'grapes', unit: 'lb' })
+
+    const cheaper = makeItem({
+      ingredientId: 'grapes-2',
+      name: 'Grapes Family Pack',
+      unit: 'Family Size',
+      lineTotal: 5.00,
+      unitPrice: 5.00,
+    })
+    const pricier = makeItem({
+      ingredientId: 'grapes-2',
+      name: 'Grapes Club Pack',
+      unit: 'Deli Thin Sliced',   // also unparseable
+      lineTotal: 7.00,
+      unitPrice: 7.00,
+    })
+
+    const storeA = makeStore({ storeName: 'Kroger', distanceMiles: 1.0, items: [cheaper] })
+    const storeB = makeStore({ storeName: 'Walmart', distanceMiles: 1.0, items: [pricier] })
+
+    const result = selectWinner(spec, [storeA, storeB], noUser)
+
+    // Both candidates should be present and eligible
+    expect(result.winner).not.toBeNull()
+    expect(result.allCandidates).toHaveLength(2)
+    // The cheaper one ($5 lineTotal → lower synthetic pricePerBase) wins
+    expect(result.winner!.storeName).toBe('Kroger')
+    expect(result.winner!.item.lineTotal).toBe(5.00)
   })
 })
