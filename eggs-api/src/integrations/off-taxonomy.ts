@@ -75,7 +75,9 @@ interface OffProductRaw {
 
 const OFF_BASE = 'https://world.openfoodfacts.org/api/v2'
 const TTL_SECONDS = 7 * 24 * 60 * 60  // 7 days
+const TTL_SECONDS_NEGATIVE = 60 * 60   // 1 hour for null / no-result caches
 const DEFAULT_PAGE_SIZE = 25
+const BROADER_TERM_TIMEOUT_MS = 5000   // 5-second ceiling for broader-term lookup
 
 // ─── Mapping helper ───────────────────────────────────────────────────────────
 
@@ -97,6 +99,8 @@ function mapProduct(raw: OffProductRaw): OffProduct {
 
 export class OffTaxonomyClient {
   private readonly fetchImpl: typeof fetch
+  // Raw KV namespace kept for broader-term caching (custom TTL logic).
+  private readonly cacheNs: KVLike
 
   // Cached taxonomy fetcher (shared by getParents/getChildren/getSynonyms)
   private readonly taxonomyCached: (tag: string, lang: string) => Promise<OffTaxonomyResponse>
@@ -107,6 +111,7 @@ export class OffTaxonomyClient {
     // Arrow wrapper avoids "Illegal invocation" on Cloudflare Workers when the
     // default unbound `globalThis.fetch` is called as a method.
     this.fetchImpl = opts.fetchImpl ?? ((input, init) => fetch(input, init))
+    this.cacheNs = opts.cacheNs
 
     // ── Taxonomy cache ────────────────────────────────────────────────────────
     // All three taxonomy methods (getParents, getChildren, getSynonyms) share
@@ -171,6 +176,119 @@ export class OffTaxonomyClient {
     const country = opts?.country ?? 'united-states'
     const pageSize = opts?.pageSize ?? DEFAULT_PAGE_SIZE
     return this.searchCached(term, country, pageSize)
+  }
+
+  /**
+   * Return a broader (parent) search term for the given free-text ingredient
+   * name using the OFF taxonomy.  Returns null when no broader term is found.
+   *
+   * Algorithm:
+   *   1. Cache-check ONTOLOGY_CACHE with key `broader:{lc(name)}` (7d positive,
+   *      1h negative — parent terms rarely change).
+   *   2. searchByText(name) — take the first product's categoriesTags.
+   *   3. Pick the most-specific tag (last element), walk up one level via
+   *      getParents(tag).
+   *   4. Strip the language prefix and convert dashes to spaces ("en:oats" → "oats").
+   *   5. Cache and return.
+   *
+   * The entire operation is wrapped in a 5-second AbortController timeout so a
+   * slow OFF API never blocks the store search.
+   */
+  async broaderTerm(name: string): Promise<string | null> {
+    const cacheKey = `broader:${name.toLowerCase().trim()}`
+
+    // ── 1. Cache check ────────────────────────────────────────────────────────
+    try {
+      const cached = await this.cacheNs.get(cacheKey)
+      if (cached !== null) {
+        return JSON.parse(cached) as string | null
+      }
+    } catch {
+      /* cache read failure is non-fatal; proceed to network */
+    }
+
+    // ── 2. Network lookup with 5-second timeout ────────────────────────────
+    const ac = new AbortController()
+    const timer = setTimeout(() => ac.abort(), BROADER_TERM_TIMEOUT_MS)
+    let broader: string | null = null
+
+    try {
+      broader = await this._computeBroaderTerm(name, ac.signal)
+    } catch {
+      /* OFF rate-limit, timeout, or any other error → return null */
+    } finally {
+      clearTimeout(timer)
+    }
+
+    // ── 3. Cache result ───────────────────────────────────────────────────────
+    // Positive results (non-null) cached 7 days; null results cached 1 hour.
+    const ttl = broader !== null ? TTL_SECONDS : TTL_SECONDS_NEGATIVE
+    try {
+      await this.cacheNs.put(cacheKey, JSON.stringify(broader), { expirationTtl: ttl })
+    } catch {
+      /* cache write failure is non-fatal */
+    }
+
+    return broader
+  }
+
+  /** Internal: compute broader term without caching. Separated for testability. */
+  private async _computeBroaderTerm(name: string, signal?: AbortSignal): Promise<string | null> {
+    // Fetch first page of products for this name.
+    const products = await this._fetchSearchWithSignal(name, 'united-states', 5, signal)
+    if (products.length === 0) return null
+
+    // Find the first product that has at least one category tag.
+    const withTags = products.find(p => p.categoriesTags.length > 0)
+    if (!withTags) return null
+
+    // The most-specific tag is the LAST one (OFF orders general → specific).
+    const specificTag = withTags.categoriesTags[withTags.categoriesTags.length - 1]
+    if (!specificTag) return null
+
+    // Walk one level up in the taxonomy.
+    const parents = await this.getParents(specificTag)
+    if (parents.length === 0) return null
+
+    // Convert the first parent tag to plain English: "en:steel-cut-oats" → "steel cut oats"
+    const parentTag = parents[0]
+    const plain = parentTag
+      .replace(/^[a-z]{2}:/, '')    // strip language prefix
+      .replace(/-/g, ' ')            // dashes → spaces
+    return plain || null
+  }
+
+  /** Thin variant of _fetchSearch that accepts an AbortSignal for timeout. */
+  private async _fetchSearchWithSignal(
+    term: string,
+    country: string,
+    pageSize: number,
+    signal?: AbortSignal
+  ): Promise<OffProduct[]> {
+    if (signal?.aborted) return []
+    const params = new URLSearchParams({
+      search_terms: term,
+      countries_tags_en: country,
+      page_size: String(pageSize),
+      fields: 'code,product_name,brands,categories_tags,labels_tags,countries_tags,quantity,serving_size,image_url',
+    })
+    const url = `${OFF_BASE}/search?${params}`
+
+    const res = await this.fetchImpl(url, { signal })
+
+    if (res.status === 429) {
+      throw new Error(
+        `Open Food Facts rate limit exceeded (429) on search for "${term}". ` +
+        `Rate limit is ~10 req/min for search. Do not retry automatically.`
+      )
+    }
+
+    if (!res.ok) {
+      throw new Error(`OFF search failed for term "${term}" with status ${res.status}`)
+    }
+
+    const data = (await res.json()) as OffSearchResponse
+    return (data.products ?? []).map(mapProduct)
   }
 
   // ─── Private fetch helpers ────────────────────────────────────────────────────

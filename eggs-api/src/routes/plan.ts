@@ -28,6 +28,7 @@ import { WalmartClient } from '../integrations/walmart.js'
 import { IdpClient } from '../integrations/instacart-idp.js'
 import { UsdaFdcClient } from '../integrations/usda-fdc.js'
 import { OpenFoodFactsClient } from '../integrations/openfoodfacts.js'
+import { OffTaxonomyClient } from '../integrations/off-taxonomy.js'
 import { resolveProductSize } from '../lib/size-resolver.js'
 import { getShopUrl, normalizeBanner } from '../integrations/store-urls.js'
 import { validateUrls } from '../lib/url-validator.js'
@@ -71,21 +72,35 @@ async function cacheKey(bannerNormalized: string, ingredientName: string): Promi
 async function searchKroger(
   ingredients: IngredientLine[],
   locations: KrogerLocation[],
-  client: KrogerClient
+  client: KrogerClient,
+  offTaxonomyClient: OffTaxonomyClient
 ): Promise<{
   storeName: string
   storeAddress: string
   items: Record<string, StoreSearchResult>
+  ontologyFallbackUsed: number
+  ontologyFallbackSucceeded: number
 } | null> {
   if (locations.length === 0) return null
   const primary = locations[0]
   const locationIds = locations.map(l => l.locationId)
 
   const items: Record<string, StoreSearchResult> = {}
+  let ontologyFallbackUsed = 0
+  let ontologyFallbackSucceeded = 0
 
   await Promise.allSettled(
     ingredients.map(async (ingredient) => {
-      const result = await client.getPriceForIngredient(ingredient.name, locationIds)
+      let result = await client.getPriceForIngredient(ingredient.name, locationIds)
+      if (!result) {
+        const broader = await offTaxonomyClient.broaderTerm(ingredient.name)
+        if (broader && broader.toLowerCase() !== ingredient.name.toLowerCase()) {
+          ontologyFallbackUsed++
+          console.log(`[kroger] "${ingredient.name}" → broader "${broader}"`)
+          result = await client.getPriceForIngredient(broader, locationIds)
+          if (result) ontologyFallbackSucceeded++
+        }
+      }
       if (result) items[ingredient.id] = result
     })
   )
@@ -97,7 +112,9 @@ async function searchKroger(
       primary.address.city,
       primary.address.state
     ].join(', '),
-    items
+    items,
+    ontologyFallbackUsed,
+    ontologyFallbackSucceeded,
   }
 }
 
@@ -105,26 +122,42 @@ async function searchKroger(
 async function searchWalmart(
   ingredients: IngredientLine[],
   client: WalmartClient,
+  offTaxonomyClient: OffTaxonomyClient,
   zipCode?: string
-): Promise<Record<string, {
-  sku: string; name: string; brand: string
-  regularPrice: number; promoPrice: number | null
-  productUrl: string; size: string
-}>> {
+): Promise<{
+  items: Record<string, {
+    sku: string; name: string; brand: string
+    regularPrice: number; promoPrice: number | null
+    productUrl: string; size: string
+  }>
+  ontologyFallbackUsed: number
+  ontologyFallbackSucceeded: number
+}> {
   const items: Record<string, {
     sku: string; name: string; brand: string
     regularPrice: number; promoPrice: number | null
     productUrl: string; size: string
   }> = {}
+  let ontologyFallbackUsed = 0
+  let ontologyFallbackSucceeded = 0
 
   await Promise.allSettled(
     ingredients.map(async (ingredient) => {
-      const result = await client.getPriceForIngredient(ingredient.name, zipCode)
+      let result = await client.getPriceForIngredient(ingredient.name, zipCode)
+      if (!result) {
+        const broader = await offTaxonomyClient.broaderTerm(ingredient.name)
+        if (broader && broader.toLowerCase() !== ingredient.name.toLowerCase()) {
+          ontologyFallbackUsed++
+          console.log(`[walmart] "${ingredient.name}" → broader "${broader}"`)
+          result = await client.getPriceForIngredient(broader, zipCode)
+          if (result) ontologyFallbackSucceeded++
+        }
+      }
       if (result) items[ingredient.id] = result
     })
   )
 
-  return items
+  return { items, ontologyFallbackUsed, ontologyFallbackSucceeded }
 }
 
 // ── Pure helper: validate + normalize AI-returned items (M5) ────────────────
@@ -518,13 +551,18 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     ...(walmartClient ? ['Walmart'] : [])
   ]
 
+  // ── OFF taxonomy client for ontology-aware search fallback (P2.6) ────────
+  // Constructed once here and shared between searchKroger and searchWalmart.
+  // Uses ONTOLOGY_CACHE KV namespace (7-day positive / 1-hour negative TTL).
+  const offTaxonomyClient = new OffTaxonomyClient({ cacheNs: c.env.ONTOLOGY_CACHE })
+
   // ── Step 2: Parallel price search ───────────────────────────────────────
   const [krogerSearchOutcome, walmartSearchOutcome, aiSearchOutcome] = await Promise.allSettled([
     krogerClient && krogerLocations.length > 0
-      ? searchKroger(ingredients, krogerLocations, krogerClient)
+      ? searchKroger(ingredients, krogerLocations, krogerClient, offTaxonomyClient)
       : Promise.resolve(null),
     walmartClient
-      ? searchWalmart(ingredients, walmartClient, walmartZip)
+      ? searchWalmart(ingredients, walmartClient, offTaxonomyClient, walmartZip)
       : Promise.resolve(null),
     searchNonApiStores(ingredients, body, user, provider, apiCoveredStores)
   ])
@@ -540,8 +578,21 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   }
 
   const krogerResult = krogerSearchOutcome.status === 'fulfilled' ? krogerSearchOutcome.value : null
-  const walmartResult = walmartSearchOutcome.status === 'fulfilled' ? walmartSearchOutcome.value : null
+  const walmartSearchResult = walmartSearchOutcome.status === 'fulfilled' ? walmartSearchOutcome.value : null
+  // Unwrap Walmart items (search function now returns { items, ontologyFallback* })
+  const walmartResult = walmartSearchResult ? walmartSearchResult.items : null
   const aiStorePlans = aiSearchOutcome.status === 'fulfilled' ? aiSearchOutcome.value : []
+
+  // ── Ontology fallback diagnostics ────────────────────────────────────────
+  const krogerFallbackUsed = krogerResult?.ontologyFallbackUsed ?? 0
+  const krogerFallbackSucceeded = krogerResult?.ontologyFallbackSucceeded ?? 0
+  const walmartFallbackUsed = walmartSearchResult?.ontologyFallbackUsed ?? 0
+  const walmartFallbackSucceeded = walmartSearchResult?.ontologyFallbackSucceeded ?? 0
+  const totalFallbackUsed = krogerFallbackUsed + walmartFallbackUsed
+  const totalFallbackSucceeded = krogerFallbackSucceeded + walmartFallbackSucceeded
+  if (totalFallbackUsed > 0) {
+    console.log('[ontology-fallback] used:', totalFallbackUsed, ', succeeded:', totalFallbackSucceeded)
+  }
 
   console.log('[plan] results → kroger items:', krogerResult ? Object.keys(krogerResult.items).length : 'null',
     'walmart items:', walmartResult ? Object.keys(walmartResult).length : 'null',

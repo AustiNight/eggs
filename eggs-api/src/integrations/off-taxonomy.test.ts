@@ -301,3 +301,213 @@ describe('OffTaxonomyClient — 429 does not retry', () => {
     expect(calls).toBe(1)
   })
 })
+
+// ─── broaderTerm ──────────────────────────────────────────────────────────────
+
+// Fixture: search response for "steel cut oats" → product has "en:steel-cut-oats" as
+// most-specific tag.  The taxonomy lookup for that tag returns parent "en:oats".
+const OFF_SEARCH_STEEL_CUT_OATS = {
+  products: [
+    {
+      code: '123456789012',
+      product_name: 'Steel Cut Oats 28oz',
+      brands: 'Bob\'s Red Mill',
+      categories_tags: ['en:cereals-and-their-products', 'en:oat-products', 'en:steel-cut-oats'],
+      labels_tags: [],
+      countries_tags: ['en:united-states'],
+      quantity: '28 oz',
+      serving_size: null,
+      image_url: null,
+    },
+  ],
+}
+
+const OFF_TAXONOMY_STEEL_CUT_OATS = {
+  'en:steel-cut-oats': {
+    name: { en: 'Steel cut oats' },
+    parents: ['en:oats'],
+  },
+}
+
+// Fixture: search for "whole kiwi" → most-specific tag is "en:kiwis", parent "en:fruits"
+const OFF_SEARCH_WHOLE_KIWI = {
+  products: [
+    {
+      code: '000000000001',
+      product_name: 'Whole Kiwi',
+      brands: '',
+      categories_tags: ['en:fresh-foods', 'en:fruits', 'en:kiwis'],
+      labels_tags: [],
+      countries_tags: ['en:united-states'],
+      quantity: null,
+      serving_size: null,
+      image_url: null,
+    },
+  ],
+}
+
+const OFF_TAXONOMY_KIWI = {
+  'en:kiwis': {
+    name: { en: 'Kiwis' },
+    parents: ['en:fruits'],
+  },
+}
+
+// Fixture: search for "X-Large Eggs" → most-specific tag "en:x-large-eggs", parent "en:eggs"
+const OFF_SEARCH_XLARGE_EGGS = {
+  products: [
+    {
+      code: '000000000002',
+      product_name: 'Grade A X-Large Eggs 12ct',
+      brands: 'Generic',
+      categories_tags: ['en:eggs', 'en:x-large-eggs'],
+      labels_tags: [],
+      countries_tags: ['en:united-states'],
+      quantity: '12',
+      serving_size: null,
+      image_url: null,
+    },
+  ],
+}
+
+const OFF_TAXONOMY_XLARGE_EGGS = {
+  'en:x-large-eggs': {
+    name: { en: 'X-Large eggs' },
+    parents: ['en:eggs'],
+  },
+}
+
+/** Build a fetch mock that routes search and taxonomy requests to different fixtures. */
+function makeRoutedFetch(
+  searchResponse: unknown,
+  taxonomyResponse: unknown
+): typeof fetch {
+  return vi.fn().mockImplementation(async (url: string) => {
+    const body = url.includes('/search') ? searchResponse : taxonomyResponse
+    return {
+      ok: true,
+      status: 200,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    }
+  }) as unknown as typeof fetch
+}
+
+describe('OffTaxonomyClient.broaderTerm', () => {
+  it('"steel cut oats" → "oats"', async () => {
+    const fetchImpl = makeRoutedFetch(OFF_SEARCH_STEEL_CUT_OATS, OFF_TAXONOMY_STEEL_CUT_OATS)
+    const client = new OffTaxonomyClient({ cacheNs: makeMockKV(), fetchImpl })
+
+    const result = await client.broaderTerm('steel cut oats')
+    expect(result).toBe('oats')
+  })
+
+  it('"whole kiwi" → "fruits" (parent of en:kiwis)', async () => {
+    const fetchImpl = makeRoutedFetch(OFF_SEARCH_WHOLE_KIWI, OFF_TAXONOMY_KIWI)
+    const client = new OffTaxonomyClient({ cacheNs: makeMockKV(), fetchImpl })
+
+    const result = await client.broaderTerm('whole kiwi')
+    expect(result).toBe('fruits')
+  })
+
+  it('"X-Large Eggs" → "eggs"', async () => {
+    const fetchImpl = makeRoutedFetch(OFF_SEARCH_XLARGE_EGGS, OFF_TAXONOMY_XLARGE_EGGS)
+    const client = new OffTaxonomyClient({ cacheNs: makeMockKV(), fetchImpl })
+
+    const result = await client.broaderTerm('X-Large Eggs')
+    expect(result).toBe('eggs')
+  })
+
+  it('completely-novel-product-xyz → null (no products returned)', async () => {
+    const fetchImpl = makeFetch({ products: [] })
+    const client = new OffTaxonomyClient({ cacheNs: makeMockKV(), fetchImpl })
+
+    const result = await client.broaderTerm('completely-novel-product-xyz')
+    expect(result).toBeNull()
+  })
+
+  it('caches null results with 1-hour TTL (negative cache)', async () => {
+    const ns = makeMockKV()
+    const fetchImpl = makeFetch({ products: [] })
+    const client = new OffTaxonomyClient({ cacheNs: ns, fetchImpl })
+
+    const result = await client.broaderTerm('completely-novel-product-xyz')
+    expect(result).toBeNull()
+
+    // KV should now contain the "null" sentinel for this key
+    const cacheKey = 'broader:completely-novel-product-xyz'
+    const stored = await ns.get(cacheKey)
+    expect(stored).toBe('null')  // JSON.stringify(null) === 'null'
+  })
+
+  it('returns cached result immediately on second call (no extra fetch)', async () => {
+    const fetchImpl = makeRoutedFetch(OFF_SEARCH_STEEL_CUT_OATS, OFF_TAXONOMY_STEEL_CUT_OATS)
+    const ns = makeMockKV()
+    const client = new OffTaxonomyClient({ cacheNs: ns, fetchImpl })
+
+    const first = await client.broaderTerm('steel cut oats')
+    expect(first).toBe('oats')
+
+    const callCountAfterFirst = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls.length
+
+    const second = await client.broaderTerm('steel cut oats')
+    expect(second).toBe('oats')
+
+    // No additional fetch calls after the first resolution
+    expect((fetchImpl as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callCountAfterFirst)
+  })
+
+  it('returns null when product has no category tags', async () => {
+    const fetchImpl = makeFetch({
+      products: [
+        {
+          code: '000000000099',
+          product_name: 'Mystery Food',
+          brands: '',
+          categories_tags: [],
+          labels_tags: [],
+          countries_tags: ['en:united-states'],
+          quantity: null,
+          serving_size: null,
+          image_url: null,
+        },
+      ],
+    })
+    const client = new OffTaxonomyClient({ cacheNs: makeMockKV(), fetchImpl })
+
+    const result = await client.broaderTerm('mystery food')
+    expect(result).toBeNull()
+  })
+
+  it('returns null when the most-specific tag has no parents (top-level category)', async () => {
+    const fetchImpl = makeRoutedFetch(
+      {
+        products: [{
+          code: '000000000003',
+          product_name: 'Food',
+          brands: '',
+          categories_tags: ['en:foods'],
+          labels_tags: [],
+          countries_tags: ['en:united-states'],
+          quantity: null,
+          serving_size: null,
+          image_url: null,
+        }],
+      },
+      // Taxonomy has no parents for en:foods
+      { 'en:foods': { name: { en: 'Foods' } } }
+    )
+    const client = new OffTaxonomyClient({ cacheNs: makeMockKV(), fetchImpl })
+
+    const result = await client.broaderTerm('food')
+    expect(result).toBeNull()
+  })
+
+  it('returns null gracefully when network throws (no crash)', async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error('network error')) as unknown as typeof fetch
+    const client = new OffTaxonomyClient({ cacheNs: makeMockKV(), fetchImpl })
+
+    const result = await client.broaderTerm('anything')
+    expect(result).toBeNull()
+  })
+})
