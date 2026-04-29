@@ -1,6 +1,6 @@
 # E.G.G.S. Test Coverage Matrix
 
-**Last updated:** 2026-04-23  
+**Last updated:** 2026-04-22  
 **Rule:** Every new feature or change that may impact automated testing must update this file — even if the automation isn't written yet. The matrix is the source of truth for what tests *should* exist.
 
 ---
@@ -113,6 +113,22 @@
 | verifyProductContent: <60% name-token coverage = rejected | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/lib/content-verifier.test.ts` | Added 2026-04-23 |
 | verifyProductContent: abort timeout returns rejected with reason | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/lib/content-verifier.test.ts` | Added 2026-04-23 |
 | AI proof URLs downgraded to confidence=estimated when HTML-verify fails | Manual | ➖ | ➖ | ➖ | ➖ | `scripts/manual-verification/ai-proof-url-verification.md` | 2026-04-23 — wire integration |
+| detectHumorOpportunity: pun-target word returns "pun" | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 — P1.1 narrative |
+| detectHumorOpportunity: lifestyle marker returns "lifestyle" | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| detectHumorOpportunity: pun takes priority over lifestyle | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| detectHumorOpportunity: "organic" ×2 triggers lifestyle | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| detectHumorOpportunity: plain list returns "none" | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| buildNarrativePrompt: encodes matched/requested counts | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| buildNarrativePrompt: lists all unmatched item names | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| buildNarrativePrompt: includes store name + subtotals | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| buildNarrativePrompt: includes real vs estimated counts | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| buildNarrativePrompt: forbids "100%" language | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| buildNarrativePrompt: pun hint when pun target present | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| buildNarrativePrompt: lifestyle hint when lifestyle marker present | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| buildNarrativePrompt: no humor hint for plain list | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| fallbackNarrative: never claims "100%" | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| fallbackNarrative: names unmatched items | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
+| fallbackNarrative: mentions real + estimated counts | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-api/src/routes/plan-narrative.test.ts` | Added 2026-04-22 |
 
 ---
 
