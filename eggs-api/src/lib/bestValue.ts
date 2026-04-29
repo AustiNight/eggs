@@ -297,7 +297,7 @@ export function selectWinner(
   const result: WinnerResult = {
     spec,
     winner,
-    eligibleCandidates: sorted,
+    eligibleCandidates: sorted.slice(1),
     allCandidates,
   }
   if (warning !== undefined) result.warning = warning

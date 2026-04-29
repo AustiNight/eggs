@@ -564,6 +564,33 @@ describe('§2.5 three-item × four-store acceptance test', () => {
   })
 })
 
+describe('selectWinner — eligibleCandidates excludes the winner (alternatives only)', () => {
+  it('eligibleCandidates excludes the winner (alternatives only)', () => {
+    const spec = makeSpec({ id: 'milk-1', displayName: 'whole milk', unit: 'l' })
+
+    // Two priced candidates so there is a winner + at least one alternative
+    const itemA = makeItem({ ingredientId: 'milk-1', name: 'Store Brand Whole Milk', unit: '1 l', lineTotal: 2.99, unitPrice: 2.99 })
+    const itemB = makeItem({ ingredientId: 'milk-1', name: 'Organic Valley Whole Milk', unit: '1 l', lineTotal: 5.99, unitPrice: 5.99 })
+
+    const storeA = makeStore({ storeName: 'Aldi',   distanceMiles: 1.0, items: [itemA] })
+    const storeB = makeStore({ storeName: 'Kroger', distanceMiles: 1.5, items: [itemB] })
+
+    const result = selectWinner(spec, [storeA, storeB], noUser)
+
+    expect(result.winner).not.toBeNull()
+
+    // allCandidates must contain the winner
+    expect(result.allCandidates.some((c) => c === result.winner)).toBe(true)
+
+    // eligibleCandidates must NOT contain the winner
+    expect(result.eligibleCandidates.some((c) => c === result.winner)).toBe(false)
+
+    // eligibleCandidates has exactly 1 entry (the other candidate)
+    expect(result.eligibleCandidates).toHaveLength(1)
+    expect(result.eligibleCandidates[0].storeName).toBe('Kroger')
+  })
+})
+
 describe('selectWinner regression — winners populate when candidates exist', () => {
   it('returns a non-null winner when any store has a candidate for the spec', () => {
     const spec = makeSpec({ id: 's1', displayName: 'chicken thighs', unit: 'lb' })
@@ -582,6 +609,7 @@ describe('selectWinner regression — winners populate when candidates exist', (
     expect(result.winner).not.toBeNull()
     expect(result.winner?.item.name).toContain('Chicken Thighs')
     expect(result.winner?.storeName).toBe('Kroger')
-    expect(result.eligibleCandidates).toHaveLength(1)
+    // Single candidate becomes the winner; no alternatives remain
+    expect(result.eligibleCandidates).toHaveLength(0)
   })
 })
