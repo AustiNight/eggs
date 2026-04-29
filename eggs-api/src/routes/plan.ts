@@ -30,6 +30,8 @@ import { getShopUrl, normalizeBanner } from '../integrations/store-urls.js'
 import { validateUrls } from '../lib/url-validator.js'
 import { verifyProductContent } from '../lib/content-verifier.js'
 import type { StoreSearchResult } from '../integrations/StoreAdapter.js'
+import { buildNarrativePrompt, fallbackNarrative } from './plan-narrative.js'
+import type { NarrativeFacts } from './plan-narrative.js'
 
 const plan = new Hono<HonoEnv>()
 
@@ -896,42 +898,45 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   }
 
   // ── Narrative summary ────────────────────────────────────────────────────
+  // Compute which ingredients have NO match across ALL stores.
+  const trulyUnmatched = ingredients.filter(ing =>
+    finalStores.every(s =>
+      s.items.some(item => item.ingredientId === ing.id && item.notAvailable)
+      || !s.items.some(item => item.ingredientId === ing.id)
+    )
+  )
+
+  const narrativeFacts: NarrativeFacts = {
+    requested: ingredients.length,
+    matched: ingredients.length - trulyUnmatched.length,
+    unmatchedNames: trulyUnmatched.map(i => i.name),
+    stores: finalStores.map(s => ({
+      name: s.storeName,
+      source: s.priceSource === 'kroger_api' ? 'live Kroger API'
+        : s.priceSource === 'walmart_api' ? 'live Walmart API'
+        : 'AI web search + URL validation',
+      subtotal: s.subtotal,
+    })),
+    total,
+    realCount,
+    estimatedCount,
+    ingredientNames: ingredients.map(i => i.name.toLowerCase()),
+  }
+
   let planNarrative = ''
   try {
-    const storeLines = finalStores.map(s => {
-      const available = s.items.filter(i => !i.notAvailable)
-      const source = s.priceSource === 'kroger_api' ? 'live Kroger API'
-        : s.priceSource === 'walmart_api' ? 'live Walmart API'
-        : 'AI web search + URL validation'
-      return `${s.storeName} (${available.length}/${ingredients.length} items found, ${source}, subtotal $${s.subtotal.toFixed(2)})`
-    }).join('; ')
-
-    const totalItems = allItems.length
-    const budgetNote = body.budget?.mode === 'ceiling' && body.budget.amount
-      ? ` Budget ceiling was $${body.budget.amount.toFixed(2)} — plan ${total > body.budget.amount ? 'exceeded' : 'came in under'} at $${total.toFixed(2)}.`
-      : ''
-
     const narrativeResult = await provider.complete({
       system: 'You write concise, honest shopping plan summaries for a grocery price optimization tool.',
       messages: [{
         role: 'user',
-        content: `You are the E.G.G.S. shopping agent. Write a 2-3 sentence summary of the shopping plan results below. Be specific about which stores were found, how many items were matched, and whether prices are live or estimated.
-
-Plan results:
-- Direct APIs: Kroger${walmartClient ? ' + Walmart' : ''}. AI web search covers all other nearby stores.
-- Results: ${storeLines}
-- Total: $${total.toFixed(2)} (including ~8.25% tax)
-- ${realCount} of ${totalItems} item prices are live (verified); ${estimatedCount} are AI-estimated${budgetNote}
-
-Write only the summary paragraph, no preamble.`
+        content: buildNarrativePrompt(narrativeFacts),
       }],
       maxTokens: 200,
-      jsonMode: false
+      jsonMode: false,
     })
     planNarrative = narrativeResult.content.trim()
   } catch {
-    const storeCount = finalStores.length
-    planNarrative = `Searched Kroger${walmartClient ? ' + Walmart' : ''} via live API and ${storeCount > 1 ? `${storeCount - 1} additional store${storeCount > 2 ? 's' : ''} via AI + URL validation` : 'nearby stores via AI + URL validation'} in parallel. ${realCount} live price${realCount !== 1 ? 's' : ''}; ${estimatedCount} AI-estimated.`
+    planNarrative = fallbackNarrative(narrativeFacts)
   }
 
   const modelUsed = `claude-haiku-4-5 + kroger_api${walmartClient ? ' + walmart_api' : ''} + web_search + web_fetch (parallel, cached)`
