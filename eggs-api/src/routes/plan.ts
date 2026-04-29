@@ -26,6 +26,9 @@ import { getProvider, type AnthropicTool } from '../providers/index.js'
 import { KrogerClient } from '../integrations/kroger.js'
 import { WalmartClient } from '../integrations/walmart.js'
 import { IdpClient } from '../integrations/instacart-idp.js'
+import { UsdaFdcClient } from '../integrations/usda-fdc.js'
+import { OpenFoodFactsClient } from '../integrations/openfoodfacts.js'
+import { resolveProductSize } from '../lib/size-resolver.js'
 import { getShopUrl, normalizeBanner } from '../integrations/store-urls.js'
 import { validateUrls } from '../lib/url-validator.js'
 import { verifyProductContent } from '../lib/content-verifier.js'
@@ -798,6 +801,66 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
 
   // Fire-and-forget cache writes (don't block response)
   c.executionCtx.waitUntil(writeCache(c.env, cacheWrites))
+
+  // ── P2.5: Universal size resolver — fill in null pricedSize in parallel ────
+  // Construct FDC + OFF clients here (not constructed elsewhere in this route).
+  // FDC requires an API key; if absent, the resolver's tier-2 will catch the
+  // error and skip gracefully (no-op for now).
+  const fdcClient = new UsdaFdcClient({
+    apiKey: c.env.FDC_API_KEY ?? '',
+    cacheNs: c.env.FDC_CACHE,
+    sleepMs: 0, // no retry delay in Workers (avoid blocking for 1s)
+  })
+  const offClient = new OpenFoodFactsClient()
+
+  // Run resolution for all items that still lack a pricedSize — parallel per-item.
+  // Side-map tracks resolution source for future diagnostics surfacing (Phase 3).
+  const sizeResolutionSources = new Map<string, string>()
+  await Promise.all(
+    allStores.flatMap(store =>
+      store.items
+        .filter(i => !i.notAvailable && i.pricedSize === null)
+        .map(async i => {
+          try {
+            const resolved = await resolveProductSize(
+              {
+                name: i.name,
+                brand: (i as StoreItem & { brand?: string }).brand,
+                size: (i as StoreItem & { size?: string }).size,
+                productUrl: i.productUrl,
+              },
+              c.env,
+              provider,
+              fdcClient,
+              offClient,
+            )
+            if (resolved) {
+              i.pricedSize = { quantity: resolved.quantity, unit: resolved.unit }
+              // Track source for diagnostics (Phase 3 will surface this)
+              sizeResolutionSources.set(
+                `${store.storeBannerNormalized}::${i.ingredientId}`,
+                resolved.source,
+              )
+            }
+          } catch (err) {
+            // Non-fatal — item remains with pricedSize: null
+            console.warn('[plan] size-resolver threw for item', { name: i.name, err: String(err) })
+          }
+        })
+    )
+  )
+
+  const resolvedCount = sizeResolutionSources.size
+  if (resolvedCount > 0) {
+    console.log('[plan] size-resolver resolved', resolvedCount, 'items',
+      Object.fromEntries(
+        ['parseSize', 'fdc', 'off', 'web_fetch', 'web_search'].map(src => [
+          src,
+          Array.from(sizeResolutionSources.values()).filter(v => v === src).length,
+        ])
+      )
+    )
+  }
 
   // Enforce maxStores
   const finalStores = allStores.slice(0, body.settings.maxStores)
