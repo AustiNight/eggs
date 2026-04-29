@@ -61,6 +61,20 @@ export interface Env {
   INSTACART_IDP_API_KEY?: string
 }
 
+// ─── AlignmentGrade — LLM candidate grader output (P2.7) ─────────────────────
+
+/**
+ * Per-candidate grade from the LLM alignment grader.
+ * 'exact'      — same product class, same key attributes. Score 90-100.
+ * 'substitute' — same product class, one attribute differs. Score 50-89.
+ * 'wrong'      — different product class or contradictory descriptor. Score 0-49.
+ */
+export interface AlignmentGrade {
+  score: number                              // 0-100
+  category: 'exact' | 'substitute' | 'wrong'
+  reason: string                             // 1 sentence — surfaces in UI when 'substitute'
+}
+
 // ─── UserProfile — minimal shape consumed by selectWinner and plan route ─────
 
 /**

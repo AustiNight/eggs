@@ -9,7 +9,7 @@
  */
 
 import type { ShoppableItemSpec } from '../types/spec.js'
-import type { StoreItem, StorePlan, UserProfile } from '../types/index.js'
+import type { StoreItem, StorePlan, UserProfile, AlignmentGrade } from '../types/index.js'
 import type { CanonicalUnit } from '../types/index.js'
 import { parseSize, pricePerBase as computePricePerBase, BASE_DIMENSION, toBase } from './units.js'
 import { matchesBrand, normalizeBrand } from './brands.js'
@@ -43,6 +43,8 @@ export interface Candidate {
   parsedSize: { quantity: number; unit: CanonicalUnit } | null
   pricePerBase: number | null        // null means excluded
   excludeReason?: 'unit_mismatch' | 'size_unparseable' | 'not_available' | 'avoid_brand' | 'brand_mismatch'
+  /** LLM alignment grade — set by P2.7 candidate-grader before selectWinner (P2.8) consumes it. */
+  alignmentGrade?: AlignmentGrade
 }
 
 export interface WinnerResult {

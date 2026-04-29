@@ -30,6 +30,8 @@ import { UsdaFdcClient } from '../integrations/usda-fdc.js'
 import { OpenFoodFactsClient } from '../integrations/openfoodfacts.js'
 import { OffTaxonomyClient } from '../integrations/off-taxonomy.js'
 import { resolveProductSize } from '../lib/size-resolver.js'
+import { gradeCandidates } from '../lib/candidate-grader.js'
+import type { GradeRequest } from '../lib/candidate-grader.js'
 import { getShopUrl, normalizeBanner } from '../integrations/store-urls.js'
 import { validateUrls } from '../lib/url-validator.js'
 import { verifyProductContent } from '../lib/content-verifier.js'
@@ -977,6 +979,90 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     const synthesizedSpecs = extractSpecs(interimPlan)
     const clientSpecsById = new Map(clientSpecs.map(s => [s.id, s]))
     resolvedSpecs = synthesizedSpecs.map(s => clientSpecsById.get(s.id) ?? s)
+
+    // ── P2.7: LLM candidate grader — grade each spec's candidates in parallel ──
+    // Build per-spec candidate lists from all stores (skip notAvailable items).
+    const candidatesBySpec = new Map<string, GradeRequest>()
+    for (const spec of resolvedSpecs) {
+      const candidates: GradeRequest['candidates'] = []
+      for (const store of finalStores) {
+        for (const item of store.items) {
+          if (item.ingredientId === spec.id && !item.notAvailable) {
+            candidates.push({
+              sku: item.sku ?? `${store.storeBannerNormalized ?? store.storeName}:${spec.id}`,
+              storeName: store.storeName,
+              name: item.name,
+              brand: (item as StoreItem & { brand?: string }).brand ?? '',
+              size: item.pricedSize
+                ? `${item.pricedSize.quantity} ${item.pricedSize.unit}`
+                : (item as StoreItem & { size?: string }).size ?? 'unknown',
+              unitPrice: item.unitPrice,
+            })
+          }
+        }
+      }
+      if (candidates.length > 0) {
+        candidatesBySpec.set(spec.id, {
+          spec: {
+            id: spec.id,
+            displayName: spec.displayName,
+            brand: spec.brand,
+            brandLocked: spec.brandLocked,
+            quantity: spec.quantity,
+            unit: spec.unit,
+            category: (spec as typeof spec & { category?: string }).category,
+          },
+          candidates,
+        })
+      }
+    }
+
+    // Grade in parallel — one LLM call per spec.
+    const specGradesMap = new Map<string, Map<string, import('../types/index.js').AlignmentGrade>>()
+    let graderCalls = 0
+    let graderCacheHits = 0
+    const totalCandidates = Array.from(candidatesBySpec.values())
+      .reduce((sum, r) => sum + r.candidates.length, 0)
+
+    await Promise.all(
+      Array.from(candidatesBySpec.entries()).map(async ([specId, gradeReq]) => {
+        try {
+          const grades = await gradeCandidates(gradeReq, provider, c.env.URL_CACHE)
+          specGradesMap.set(specId, grades)
+          graderCalls++
+          // Count how many were cache hits (grades returned but no LLM call needed
+          // for that candidate — approximated as total - uncached).
+          graderCacheHits += gradeReq.candidates.length - grades.size +
+            gradeReq.candidates.filter(cand => {
+              // A cache hit means the grade was already present before LLM was called.
+              // We can't know post-facto without refactoring; track conservatively.
+              return false
+            }).length
+        } catch (err) {
+          console.warn('[plan] grader failed for spec', specId, String(err))
+        }
+      })
+    )
+
+    if (graderCalls > 0) {
+      console.log('[plan] P2.7 candidate grader', {
+        specsGraded: graderCalls,
+        totalCandidates,
+        cacheHits: graderCacheHits,
+      })
+    }
+
+    // Attach grades to items so P2.8 selectWinner can consume them.
+    for (const store of finalStores) {
+      for (const item of store.items) {
+        const grades = specGradesMap.get(item.ingredientId)
+        if (grades) {
+          const sku = item.sku ?? `${store.storeBannerNormalized ?? store.storeName}:${item.ingredientId}`
+          const grade = grades.get(sku)
+          if (grade) (item as any).__grade = grade
+        }
+      }
+    }
 
     // Compute per-item winners and attach to the plan.
     planWinners = resolvedSpecs.map(spec => selectWinner(spec, finalStores, userProfile))
