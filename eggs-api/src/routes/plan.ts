@@ -1059,7 +1059,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
         if (grades) {
           const sku = item.sku ?? `${store.storeBannerNormalized ?? store.storeName}:${item.ingredientId}`
           const grade = grades.get(sku)
-          if (grade) (item as any).__grade = grade
+          if (grade) item.alignmentGrade = grade
         }
       }
     }

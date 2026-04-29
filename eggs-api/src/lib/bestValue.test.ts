@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { selectWinner } from './bestValue.js'
 import type { Candidate, WinnerResult } from './bestValue.js'
 import type { ShoppableItemSpec } from '../types/spec.js'
-import type { StoreItem, StorePlan, UserProfile } from '../types/index.js'
+import type { StoreItem, StorePlan, UserProfile, AlignmentGrade } from '../types/index.js'
 
 // ─── Test fixture helpers ─────────────────────────────────────────────────────
 
@@ -133,8 +133,11 @@ describe('selectWinner — all candidates on avoid_brands → all_avoided_fallba
     const spec = makeSpec({ id: 'soda-1', displayName: 'cola soda', unit: 'ml' })
     const user: UserProfile = { avoid_brands: ['Coca Cola', 'Pepsi'] }
 
-    const itemCoke = makeItem({ ingredientId: 'soda-1', name: 'Coca Cola 500ml', unit: '500 ml', lineTotal: 1.99, unitPrice: 1.99 })
-    const itemPepsi = makeItem({ ingredientId: 'soda-1', name: 'Pepsi 500ml', unit: '500 ml', lineTotal: 1.79, unitPrice: 1.79 })
+    // Use clearly differentiated prices so that pricePerBase difference exceeds
+    // PRICE_BAND (0.005) and cheaper candidate wins deterministically.
+    // Coke: $4.00/500ml = $0.008/ml, Pepsi: $1.00/500ml = $0.002/ml → |diff| = 0.006 > 0.005
+    const itemCoke = makeItem({ ingredientId: 'soda-1', name: 'Coca Cola 500ml', unit: '500 ml', lineTotal: 4.00, unitPrice: 4.00 })
+    const itemPepsi = makeItem({ ingredientId: 'soda-1', name: 'Pepsi 500ml', unit: '500 ml', lineTotal: 1.00, unitPrice: 1.00 })
 
     const store = makeStore({ storeName: 'Walmart', items: [itemCoke, itemPepsi] })
 
@@ -734,5 +737,265 @@ describe('selectWinner — all candidates size_unparseable → winner is cheapes
     // The cheaper one ($5 lineTotal → lower synthetic pricePerBase) wins
     expect(result.winner!.storeName).toBe('Kroger')
     expect(result.winner!.item.lineTotal).toBe(5.00)
+  })
+})
+
+// ─── P2.8: Grade-aware ranking tests ─────────────────────────────────────────
+
+function makeGrade(overrides: Partial<AlignmentGrade> = {}): AlignmentGrade {
+  return {
+    score: 90,
+    category: 'exact',
+    reason: 'exact match',
+    ...overrides,
+  }
+}
+
+describe('P2.8 — wrong-category candidate is excluded from winner + eligibleCandidates', () => {
+  it('wrong candidate appears in allCandidates with excludeReason wrong_product but is not winner nor eligible', () => {
+    const spec = makeSpec({ id: 'milk-p28', displayName: 'whole milk', unit: 'l' })
+
+    const wrongItem = makeItem({
+      ingredientId: 'milk-p28',
+      name: 'Almond Milk',
+      unit: '1 l',
+      lineTotal: 3.99,
+      alignmentGrade: makeGrade({ score: 20, category: 'wrong', reason: 'plant-based, not dairy' }),
+    })
+    const rightItem = makeItem({
+      ingredientId: 'milk-p28',
+      name: 'Whole Milk',
+      unit: '1 l',
+      lineTotal: 4.49,
+      alignmentGrade: makeGrade({ score: 95, category: 'exact', reason: 'exact match' }),
+    })
+
+    const storeA = makeStore({ storeName: 'Kroger', distanceMiles: 1.0, items: [wrongItem] })
+    const storeB = makeStore({ storeName: 'Walmart', distanceMiles: 1.5, items: [rightItem] })
+
+    const result = selectWinner(spec, [storeA, storeB], noUser)
+
+    // Winner is the right item, not the wrong one
+    expect(result.winner).not.toBeNull()
+    expect(result.winner!.item.name).toContain('Whole Milk')
+
+    // Wrong candidate is in allCandidates with excludeReason
+    const wrongCandidate = result.allCandidates.find(c => c.item.name === 'Almond Milk')
+    expect(wrongCandidate).toBeDefined()
+    expect(wrongCandidate!.excludeReason).toBe('wrong_product')
+
+    // Wrong candidate is NOT in eligibleCandidates
+    expect(result.eligibleCandidates.some(c => c.item.name === 'Almond Milk')).toBe(false)
+  })
+})
+
+describe('P2.8 — exact grade wins over cheaper substitute', () => {
+  it('exact (score 95, $5/lb) beats substitute (score 70, $3/lb)', () => {
+    const spec = makeSpec({ id: 'flour-p28', displayName: 'all-purpose flour', unit: 'lb' })
+
+    const exactItem = makeItem({
+      ingredientId: 'flour-p28',
+      name: 'All-Purpose Flour 5 lb',
+      unit: '5 lb',
+      lineTotal: 25.00,   // $5/lb
+      alignmentGrade: makeGrade({ score: 95, category: 'exact', reason: 'exact match' }),
+    })
+    const substituteItem = makeItem({
+      ingredientId: 'flour-p28',
+      name: 'Bread Flour 5 lb',
+      unit: '5 lb',
+      lineTotal: 15.00,   // $3/lb
+      alignmentGrade: makeGrade({ score: 70, category: 'substitute', reason: 'bread flour instead of all-purpose' }),
+    })
+
+    const storeA = makeStore({ storeName: 'Kroger', distanceMiles: 1.0, items: [exactItem] })
+    const storeB = makeStore({ storeName: 'Walmart', distanceMiles: 1.0, items: [substituteItem] })
+
+    const result = selectWinner(spec, [storeA, storeB], noUser)
+
+    expect(result.winner).not.toBeNull()
+    // Exact wins despite being 67% more expensive
+    expect(result.winner!.item.name).toContain('All-Purpose')
+    expect(result.winner!.storeName).toBe('Kroger')
+  })
+})
+
+describe('P2.8 — within ±5 score band, cheaper wins', () => {
+  it('two exact candidates within 5-point band: cheapest pricePerBase wins', () => {
+    const spec = makeSpec({ id: 'sugar-p28', displayName: 'granulated sugar', unit: 'lb' })
+
+    // Both 'exact', scores 95 and 92 — within ±5 band, so price decides.
+    // Use 1 lb units so pricePerBase = lineTotal / 453.592g.
+    // pricierExact: $5.00/lb → ~$0.01102/g
+    // cheaperExact: $2.00/lb → ~$0.00441/g
+    // |diff| ≈ 0.0066 > PRICE_BAND (0.005), so cheaper wins.
+    const pricierExact = makeItem({
+      ingredientId: 'sugar-p28',
+      name: 'C&H Granulated Sugar 1 lb',
+      unit: '1 lb',
+      lineTotal: 5.00,   // $5/lb → ~$0.01102/g
+      alignmentGrade: makeGrade({ score: 95, category: 'exact', reason: 'exact match' }),
+    })
+    const cheaperExact = makeItem({
+      ingredientId: 'sugar-p28',
+      name: 'Store Brand Granulated Sugar 1 lb',
+      unit: '1 lb',
+      lineTotal: 2.00,   // $2/lb → ~$0.00441/g
+      alignmentGrade: makeGrade({ score: 92, category: 'exact', reason: 'exact match, store brand' }),
+    })
+
+    const storeA = makeStore({ storeName: 'Kroger', distanceMiles: 1.0, items: [pricierExact] })
+    const storeB = makeStore({ storeName: 'Walmart', distanceMiles: 1.0, items: [cheaperExact] })
+
+    const result = selectWinner(spec, [storeA, storeB], noUser)
+
+    expect(result.winner).not.toBeNull()
+    // Cheaper wins because scores within ±5 band and price difference exceeds PRICE_BAND
+    expect(result.winner!.storeName).toBe('Walmart')
+    expect(result.winner!.item.name).toContain('Store Brand')
+  })
+})
+
+describe('P2.8 — all candidates wrong → winner null, eligibleCandidates empty', () => {
+  it('when every candidate is category wrong, winner is null and eligibleCandidates is empty', () => {
+    const spec = makeSpec({ id: 'butter-p28', displayName: 'unsalted butter', unit: 'lb' })
+
+    const wrong1 = makeItem({
+      ingredientId: 'butter-p28',
+      name: 'Margarine Spread',
+      unit: '1 lb',
+      lineTotal: 2.99,
+      alignmentGrade: makeGrade({ score: 15, category: 'wrong', reason: 'margarine not butter' }),
+    })
+    const wrong2 = makeItem({
+      ingredientId: 'butter-p28',
+      name: 'Coconut Oil',
+      unit: '1 lb',
+      lineTotal: 5.99,
+      alignmentGrade: makeGrade({ score: 10, category: 'wrong', reason: 'coconut oil not butter' }),
+    })
+
+    const storeA = makeStore({ storeName: 'Kroger', distanceMiles: 1.0, items: [wrong1] })
+    const storeB = makeStore({ storeName: 'Walmart', distanceMiles: 1.5, items: [wrong2] })
+
+    const result = selectWinner(spec, [storeA, storeB], noUser)
+
+    expect(result.winner).toBeNull()
+    expect(result.eligibleCandidates).toHaveLength(0)
+    // Both still in allCandidates with wrong_product reason
+    expect(result.allCandidates).toHaveLength(2)
+    expect(result.allCandidates.every(c => c.excludeReason === 'wrong_product')).toBe(true)
+  })
+})
+
+describe('P2.8 — no grades attached: falls back to pricePerBase ranking (legacy behavior)', () => {
+  it('when no alignmentGrade is set, ranking is purely by pricePerBase ascending', () => {
+    const spec = makeSpec({ id: 'cream-p28', displayName: 'heavy cream', unit: 'ml' })
+
+    // No alignmentGrade on either item → treat as score:50 ungraded → price decides.
+    // Use 100ml units so pricePerBase = lineTotal / 100ml.
+    // expensive: $5.00/100ml → $0.05/ml
+    // cheap:     $1.00/100ml → $0.01/ml
+    // |diff| = 0.04/ml > PRICE_BAND (0.005), so cheaper wins.
+    const expensive = makeItem({
+      ingredientId: 'cream-p28',
+      name: 'Heavy Cream 100ml',
+      unit: '100 ml',
+      lineTotal: 5.00,   // $0.05/ml
+    })
+    const cheap = makeItem({
+      ingredientId: 'cream-p28',
+      name: 'Heavy Cream 100ml',
+      unit: '100 ml',
+      lineTotal: 1.00,   // $0.01/ml
+    })
+
+    const storeA = makeStore({ storeName: 'Kroger', distanceMiles: 1.0, items: [expensive] })
+    const storeB = makeStore({ storeName: 'Walmart', distanceMiles: 1.0, items: [cheap] })
+
+    const result = selectWinner(spec, [storeA, storeB], noUser)
+
+    expect(result.winner).not.toBeNull()
+    // No grades → same ungraded score → cheaper wins (price difference exceeds PRICE_BAND)
+    expect(result.winner!.storeName).toBe('Walmart')
+    expect(result.winner!.item.lineTotal).toBe(1.00)
+  })
+})
+
+describe('P2.8 — eligibleCandidates excludes winner (P1.2 contract still holds)', () => {
+  it('eligibleCandidates never contains the winner, even with grades attached', () => {
+    const spec = makeSpec({ id: 'oil-p28', displayName: 'olive oil', unit: 'ml' })
+
+    const itemA = makeItem({
+      ingredientId: 'oil-p28',
+      name: 'Extra Virgin Olive Oil 500ml',
+      unit: '500 ml',
+      lineTotal: 8.00,
+      alignmentGrade: makeGrade({ score: 95, category: 'exact', reason: 'exact match' }),
+    })
+    const itemB = makeItem({
+      ingredientId: 'oil-p28',
+      name: 'Pure Olive Oil 500ml',
+      unit: '500 ml',
+      lineTotal: 6.00,
+      alignmentGrade: makeGrade({ score: 70, category: 'substitute', reason: 'pure not EVOO' }),
+    })
+
+    const storeA = makeStore({ storeName: 'Aldi', distanceMiles: 1.0, items: [itemA] })
+    const storeB = makeStore({ storeName: 'Kroger', distanceMiles: 1.5, items: [itemB] })
+
+    const result = selectWinner(spec, [storeA, storeB], noUser)
+
+    expect(result.winner).not.toBeNull()
+    // allCandidates must contain the winner
+    expect(result.allCandidates.some(c => c === result.winner)).toBe(true)
+    // eligibleCandidates must NOT contain the winner
+    expect(result.eligibleCandidates.some(c => c === result.winner)).toBe(false)
+    // eligibleCandidates has exactly 1 entry
+    expect(result.eligibleCandidates).toHaveLength(1)
+  })
+})
+
+describe('P2.8 — unparseable-size candidates with grades: wrong_product excludes, others survive (P1.4 + P2.8 coexistence)', () => {
+  it('a wrong-graded unparseable candidate is excluded; an ungraded unparseable survives with fallback pricePerBase', () => {
+    const spec = makeSpec({ id: 'cheese-p28', displayName: 'cheddar cheese', unit: 'lb' })
+
+    // Candidate with unparseable size AND wrong grade — excluded via wrong_product
+    const wrongUnparseable = makeItem({
+      ingredientId: 'cheese-p28',
+      name: 'Vegan Cheese Substitute',
+      unit: 'one mystery pack',     // unparseable
+      lineTotal: 6.00,
+      alignmentGrade: makeGrade({ score: 5, category: 'wrong', reason: 'vegan substitute is not cheddar' }),
+    })
+
+    // Candidate with unparseable size and NO grade — survives with fallback PPB (P1.4)
+    const ungradedUnparseable = makeItem({
+      ingredientId: 'cheese-p28',
+      name: 'Cheddar Block Family Size',
+      unit: 'Family Size',          // unparseable
+      lineTotal: 8.00,
+      // no alignmentGrade → treated as ungraded fallback
+    })
+
+    const storeA = makeStore({ storeName: 'Kroger', distanceMiles: 1.0, items: [wrongUnparseable] })
+    const storeB = makeStore({ storeName: 'Walmart', distanceMiles: 1.5, items: [ungradedUnparseable] })
+
+    const result = selectWinner(spec, [storeA, storeB], noUser)
+
+    // Winner must be non-null (the ungraded unparseable survives)
+    expect(result.winner).not.toBeNull()
+    expect(result.winner!.storeName).toBe('Walmart')
+
+    // Wrong candidate is excluded with wrong_product reason
+    const wrongCand = result.allCandidates.find(c => c.storeName === 'Kroger')
+    expect(wrongCand).toBeDefined()
+    expect(wrongCand!.excludeReason).toBe('wrong_product')
+
+    // Ungraded unparseable is NOT excluded — has synthetic fallback pricePerBase
+    const ungradedCand = result.allCandidates.find(c => c.storeName === 'Walmart')
+    expect(ungradedCand).toBeDefined()
+    expect(ungradedCand!.excludeReason).toBe('size_unparseable')
+    expect(ungradedCand!.pricePerBase).not.toBeNull()
   })
 })

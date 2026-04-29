@@ -248,6 +248,11 @@ export interface StoreItem {
    * string and maps it to canonical units.
    */
   pricedSize: { quantity: number; unit: CanonicalUnit } | null
+  /**
+   * LLM alignment grade — populated by candidate-grader (P2.7), consumed by
+   * selectWinner (P2.8). Absent on legacy plans and items the grader skipped.
+   */
+  alignmentGrade?: AlignmentGrade
 }
 
 export interface StorePlan {

@@ -42,8 +42,8 @@ export interface Candidate {
   item: StoreItem
   parsedSize: { quantity: number; unit: CanonicalUnit } | null
   pricePerBase: number | null        // null means excluded
-  excludeReason?: 'unit_mismatch' | 'size_unparseable' | 'not_available' | 'avoid_brand' | 'brand_mismatch'
-  /** LLM alignment grade — set by P2.7 candidate-grader before selectWinner (P2.8) consumes it. */
+  excludeReason?: 'unit_mismatch' | 'size_unparseable' | 'not_available' | 'avoid_brand' | 'brand_mismatch' | 'wrong_product'
+  /** LLM alignment grade — set by P2.7 candidate-grader, consumed by selectWinner (P2.8). */
   alignmentGrade?: AlignmentGrade
 }
 
@@ -139,6 +139,8 @@ function buildCandidate(
     storeBanner: store.storeBanner,
     distanceMiles: store.distanceMiles,
     item,
+    // Copy alignmentGrade from the StoreItem (set by P2.7 candidate-grader in plan.ts)
+    ...(item.alignmentGrade !== undefined ? { alignmentGrade: item.alignmentGrade } : {}),
   }
 
   // Not available
@@ -153,7 +155,7 @@ function buildCandidate(
   if (!effectiveSize) {
     // INTERIM (replaced by Phase 2 size-resolver Task 5): see plan 2026-04-29.
     // Size could not be parsed — assign a synthetic fallback pricePerBase so this
-    // candidate is NOT silently dropped at the pricedCandidates filter. The large
+    // candidate is NOT silently dropped at the gradedCandidates filter. The large
     // penalty value pushes it to the bottom of price-asc ranking behind any
     // candidate with a confident pricePerBase.
     return {
@@ -185,7 +187,7 @@ function buildCandidate(
 
     // INTERIM (replaced by Phase 2 size-resolver Task 5): see plan 2026-04-29.
     // Unit dimension doesn't match spec and no countable cross-conversion applies.
-    // Use synthetic fallback so candidate survives pricedCandidates filter.
+    // Use synthetic fallback so candidate survives gradedCandidates filter.
     return {
       ...base,
       parsedSize: effectiveSize,
@@ -223,21 +225,49 @@ function itemIsAvoided(item: StoreItem, normalizedAvoidBrands: string[]): boolea
 }
 
 /**
+ * Neutral grade applied when a candidate has no alignmentGrade (legacy / partial-failure path).
+ * Score 50 places it below 'exact' (90-100) and above nothing — falls through to price ranking.
+ */
+const UNGRADED_FALLBACK: AlignmentGrade = { score: 50, category: 'substitute', reason: 'ungraded' }
+
+/**
+ * Extract effective alignment score for sorting, substituting the neutral fallback when absent.
+ */
+function effectiveScore(c: Candidate): number {
+  return (c.alignmentGrade ?? UNGRADED_FALLBACK).score
+}
+
+/**
  * Sort eligible candidates by:
- *   1. Lowest pricePerBase (4-decimal precision)
- *   2. Nearest store (distanceMiles, Infinity when absent)
- *   3. Alphabetical storeName (case-insensitive, trimmed)
+ *   1. Alignment score descending (higher is better)
+ *   2. Within ±5 score band: pricePerBase ascending (cheaper wins)
+ *   3. Within ±0.5 cent/g price band: nearest store (distanceMiles, Infinity when absent)
+ *   4. Final tie-break: alphabetical storeName (case-insensitive, trimmed)
  */
 function tieBreakSort(candidates: Candidate[]): Candidate[] {
+  const SCORE_BAND = 5
+  const PRICE_BAND = 0.005   // 0.5 cents (absolute) in same units as pricePerBase
+
   return [...candidates].sort((a, b) => {
+    const aScore = effectiveScore(a)
+    const bScore = effectiveScore(b)
+
+    // Step 1: score band — if outside ±5, higher score wins
+    if (Math.abs(aScore - bScore) > SCORE_BAND) return bScore - aScore
+
+    // Within same ±5 score band → fall through to price
     const aPpb = Math.round(a.pricePerBase! * PPB_PRECISION) / PPB_PRECISION
     const bPpb = Math.round(b.pricePerBase! * PPB_PRECISION) / PPB_PRECISION
-    if (aPpb !== bPpb) return aPpb - bPpb
 
+    // Step 2: price band — if outside ±0.5 cents, cheaper wins
+    if (Math.abs(aPpb - bPpb) > PRICE_BAND) return aPpb - bPpb
+
+    // Within same price band → distance
     const aDist = a.distanceMiles ?? Infinity
     const bDist = b.distanceMiles ?? Infinity
     if (aDist !== bDist) return aDist - bDist
 
+    // Step 4: alphabetical
     return a.storeName.toLowerCase().trim().localeCompare(b.storeName.toLowerCase().trim())
   })
 }
@@ -264,8 +294,18 @@ export function selectWinner(
     }
   }
 
-  // Candidates with a valid pricePerBase (not excluded by size/availability)
-  const pricedCandidates = allCandidates.filter((c) => c.pricePerBase !== null)
+  // Drop candidates graded 'wrong' — wrong product class entirely.
+  // These are excluded before brand rules and never appear in eligibleCandidates.
+  // They remain in allCandidates for per-store debug panels.
+  for (const c of allCandidates) {
+    if (c.alignmentGrade?.category === 'wrong') {
+      c.excludeReason = 'wrong_product'
+      c.pricePerBase = null
+    }
+  }
+
+  // Candidates not excluded by wrong-category or size/availability issues
+  const gradedCandidates = allCandidates.filter((c) => c.pricePerBase !== null)
 
   // ── Step 2: Apply brand rules ─────────────────────────────────────────────
   const normalizedAvoidBrands = (user.avoid_brands ?? []).map(normalizeBrand)
@@ -275,10 +315,10 @@ export function selectWinner(
 
   if (spec.brandLocked && spec.brand !== null) {
     // Brand-locked: filter to only candidates whose name matches spec.brand
-    const brandMatched = pricedCandidates.filter((c) => itemMatchesBrand(c.item, spec.brand!))
+    const brandMatched = gradedCandidates.filter((c) => itemMatchesBrand(c.item, spec.brand!))
 
     // Mark non-matching priced candidates as brand_mismatch.
-    // Note: mutates candidates in-place. allCandidates and pricedCandidates share
+    // Note: mutates candidates in-place. allCandidates and gradedCandidates share
     // the same object references, so exclusion reasons propagate to both — which is
     // what the UI per-store panels need.
     for (const c of allCandidates) {
@@ -303,7 +343,7 @@ export function selectWinner(
     const eligible: Candidate[] = []
     const avoided: Candidate[] = []
 
-    for (const c of pricedCandidates) {
+    for (const c of gradedCandidates) {
       if (itemIsAvoided(c.item, normalizedAvoidBrands)) {
         avoided.push(c)
       } else {

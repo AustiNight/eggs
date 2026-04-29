@@ -7,6 +7,13 @@ export type Confidence = 'real' | 'estimated_with_source' | 'estimated'
 // ─── M9: Best-basket winner types (frontend mirror of bestValue.ts) ───────────
 // Uses `string` for units to keep UI decoupled from backend's CanonicalUnit.
 
+/** Mirror of AlignmentGrade from eggs-api/src/types/index.ts (P2.8). */
+export interface AlignmentGrade {
+  score: number
+  category: 'exact' | 'substitute' | 'wrong'
+  reason: string
+}
+
 export interface Candidate {
   storeName: string
   storeBanner: string
@@ -14,7 +21,9 @@ export interface Candidate {
   item: StoreItem
   parsedSize: { quantity: number; unit: string } | null
   pricePerBase: number | null
-  excludeReason?: 'unit_mismatch' | 'size_unparseable' | 'not_available' | 'avoid_brand' | 'brand_mismatch'
+  excludeReason?: 'unit_mismatch' | 'size_unparseable' | 'not_available' | 'avoid_brand' | 'brand_mismatch' | 'wrong_product'
+  /** LLM alignment grade — populated by P2.7 grader, consumed by P2.8 ranker. */
+  alignmentGrade?: AlignmentGrade
 }
 
 /**
