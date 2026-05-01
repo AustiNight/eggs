@@ -14,6 +14,33 @@ export interface AlignmentGrade {
   reason: string
 }
 
+/** Mirror of PlanDiagnostics from eggs-api/src/types/index.ts (P3.1). */
+export interface PlanDiagnostics {
+  ai: {
+    pass1Failed: boolean
+    pass2Failed: boolean
+    candidateCount: number
+    proofUrlsValidated: number
+    proofUrlsContentVerified: number
+    proofUrlsContentRejected: number
+  }
+  sizeResolver: {
+    resolved: number
+    bySource: Record<'parseSize' | 'fdc' | 'off' | 'web_fetch' | 'web_search', number>
+    failed: number
+  }
+  grader: {
+    specsGraded: number
+    totalCandidates: number
+    cacheHits: number
+    rejectedAsWrong: number
+  }
+  ontology: {
+    broaderTermsAttempted: number
+    broaderTermsSucceeded: number
+  }
+}
+
 export interface Candidate {
   storeName: string
   storeBanner: string
@@ -188,6 +215,8 @@ export interface ShoppingPlan {
     budgetExceeded?: boolean
     /** Resolved specs — present on M8+ SHOPPING_V2 plans. */
     specs?: ShoppableItemSpecMirror[]
+    /** Plan-run diagnostics — present on P3.1+ plans. */
+    diagnostics?: PlanDiagnostics
   }
   ingredients: IngredientLine[]
   stores: StorePlan[]
