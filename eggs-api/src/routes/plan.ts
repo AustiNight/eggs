@@ -261,6 +261,13 @@ async function searchNonApiStores(
   // searches per plan (~$0.25 ceiling); Pro gets headroom to 100.
   const isPro = user?.subscription_tier === 'pro'
   const maxSearches = isPro ? 100 : 25
+  // Token budgets: paid users get the model's effective max so large shopping
+  // lists (20+ ingredients across 5+ stores) never silently truncate the
+  // structured tool call. Free users keep generous-but-bounded ceilings to keep
+  // worst-case Anthropic costs predictable. Haiku 4.5 supports up to 64K output
+  // tokens per call.
+  const PASS1_MAX_TOKENS = isPro ? 64000 : 8000
+  const PASS2_MAX_TOKENS = isPro ? 64000 : 16000
 
   // Two-pass architecture:
   //   Pass 1 — RESEARCH. Web tools enabled, NO record tool. Model does free-form
@@ -383,7 +390,7 @@ Ingredients:
 ${itemLines}`
         }
       ],
-      maxTokens: 8000,
+      maxTokens: PASS1_MAX_TOKENS,
       jsonMode: false,
       tools: researchTools
     })
@@ -436,13 +443,9 @@ ${itemLines}
 Emit the shopping plan now via record_shopping_plan.`
         }
       ],
-      // Pass-2 emits a structured tool call covering every ingredient × every
-      // discovered store. For a 12-ingredient list across 3-5 AI stores the JSON
-      // alone is 4-6k tokens; combined with the model's preamble + reasoning we
-      // saw real prod runs hit `stopReason: max_tokens` at 6000 and emit 0 stores.
-      // 16000 is well within Haiku's per-call output budget and gives headroom
-      // for ~30-ingredient lists across 5 stores.
-      maxTokens: 16000,
+      // Tier-aware: paid users get the model's full output budget; free users
+      // keep a generous-but-bounded ceiling. See PASS2_MAX_TOKENS definition above.
+      maxTokens: PASS2_MAX_TOKENS,
       jsonMode: false,
       tools: [recordShoppingPlanTool],
       toolChoice: { type: 'tool', name: 'record_shopping_plan' }
