@@ -18,6 +18,7 @@ import LegacyPlanView from './LegacyPlanView'
 import BestBasketList from './BestBasketList'
 import CostBreakdownChart, { type StoreTotal } from './CostBreakdownChart'
 import PerStorePanels from './PerStorePanels'
+import DiagnosticsDisclosure from './DiagnosticsDisclosure'
 
 interface PlanResultProps {
   plan: ShoppingPlan
@@ -232,6 +233,11 @@ function BestBasketView({ plan, winners, onReset, eventId, getToken }: BestBaske
 
       {/* Per-store panels (collapsible) */}
       <PerStorePanels stores={plan.stores} />
+
+      {/* Diagnostics disclosure — how matches were picked */}
+      {plan.meta.diagnostics && (
+        <DiagnosticsDisclosure diagnostics={plan.meta.diagnostics} />
+      )}
 
       <MarkShoppingCompleteButton eventId={eventId} getToken={getToken} />
 

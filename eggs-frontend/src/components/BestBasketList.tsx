@@ -12,6 +12,8 @@ import React, { useState } from 'react'
 import { ArrowLeftRight, ExternalLink, AlertTriangle } from 'lucide-react'
 import type { WinnerResult, Candidate } from '../types'
 import ItemSwapSelector from './ItemSwapSelector'
+import SubstituteBadge from './SubstituteBadge'
+import PackageDetails from './PackageDetails'
 
 interface BestBasketListProps {
   winners: WinnerResult[]
@@ -97,14 +99,6 @@ function WinnerRow({
               )}
             </div>
 
-            {/* Product name */}
-            <div className="text-right hidden md:block min-w-[120px] max-w-[180px]">
-              <div className="text-xs text-slate-400 truncate">{w.item.name}</div>
-              {w.item.isLoyaltyPrice && (
-                <span className="text-[10px] text-amber-500">Member price</span>
-              )}
-            </div>
-
             {/* Price */}
             <div className="text-right min-w-[72px]">
               <div className="font-bold text-amber-400 font-mono text-sm">${w.item.lineTotal.toFixed(2)}</div>
@@ -147,6 +141,20 @@ function WinnerRow({
           <span className="hidden sm:inline">Swap</span>
         </button>
       </div>
+
+      {/* Info block — product name, substitute badge, package details */}
+      {w && (
+        <div className="px-4 pb-3 pt-1 text-xs bg-slate-800/70">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-slate-300">→ {w.item.name}</span>
+            {w.item.isLoyaltyPrice && (
+              <span className="text-[10px] text-amber-500">Member price</span>
+            )}
+            {w.alignmentGrade && <SubstituteBadge grade={w.alignmentGrade} />}
+          </div>
+          <PackageDetails ingredient={spec} item={w.item} />
+        </div>
+      )}
 
       {/* Inline swap selector */}
       {isSwapOpen && (
