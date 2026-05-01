@@ -945,24 +945,34 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   const sizeResolutionEligible = allStores.flatMap(store =>
     store.items.filter(i => !i.notAvailable && i.pricedSize === null)
   ).length
+  // Hard per-item ceiling so a slow upstream tier (e.g. FDC 500 hanging on a 30s
+  // internal fetch timeout) can't push total wall time past Cloudflare's edge
+  // response timeout. Items that exceed this fall through with pricedSize: null;
+  // formatPricePerBase + PackageDetails handle that gracefully on the UI side.
+  const SIZE_RESOLVE_PER_ITEM_TIMEOUT_MS = 12000
   await Promise.all(
     allStores.flatMap(store =>
       store.items
         .filter(i => !i.notAvailable && i.pricedSize === null)
         .map(async i => {
           try {
-            const resolved = await resolveProductSize(
-              {
-                name: i.name,
-                brand: (i as StoreItem & { brand?: string }).brand,
-                size: (i as StoreItem & { size?: string }).size,
-                productUrl: i.productUrl,
-              },
-              c.env,
-              provider,
-              fdcClient,
-              offClient,
-            )
+            const resolved = await Promise.race([
+              resolveProductSize(
+                {
+                  name: i.name,
+                  brand: (i as StoreItem & { brand?: string }).brand,
+                  size: (i as StoreItem & { size?: string }).size,
+                  productUrl: i.productUrl,
+                },
+                c.env,
+                provider,
+                fdcClient,
+                offClient,
+              ),
+              new Promise<null>(resolve =>
+                setTimeout(() => resolve(null), SIZE_RESOLVE_PER_ITEM_TIMEOUT_MS),
+              ),
+            ])
             if (resolved) {
               i.pricedSize = { quantity: resolved.quantity, unit: resolved.unit }
               // Track source for diagnostics (P3.1)
