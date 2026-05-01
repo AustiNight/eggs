@@ -436,7 +436,13 @@ ${itemLines}
 Emit the shopping plan now via record_shopping_plan.`
         }
       ],
-      maxTokens: 6000,
+      // Pass-2 emits a structured tool call covering every ingredient × every
+      // discovered store. For a 12-ingredient list across 3-5 AI stores the JSON
+      // alone is 4-6k tokens; combined with the model's preamble + reasoning we
+      // saw real prod runs hit `stopReason: max_tokens` at 6000 and emit 0 stores.
+      // 16000 is well within Haiku's per-call output budget and gives headroom
+      // for ~30-ingredient lists across 5 stores.
+      maxTokens: 16000,
       jsonMode: false,
       tools: [recordShoppingPlanTool],
       toolChoice: { type: 'tool', name: 'record_shopping_plan' }
