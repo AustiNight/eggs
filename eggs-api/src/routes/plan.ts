@@ -9,7 +9,8 @@ import type {
   KrogerLocation,
   CanonicalUnit,
   UserProfile,
-  ClarifiedAttributes
+  ClarifiedAttributes,
+  PlanDiagnostics
 } from '../types/index.js'
 import { CANONICAL_UNITS, validateSpecInput } from '../types/spec.js'
 import type { ShoppableItemSpec } from '../types/spec.js'
@@ -236,13 +237,15 @@ export function validateAndNormalizeAiItems(rawItems: unknown[]): StoreItem[] {
 }
 
 // ── AI: search all non-API stores for ALL ingredients (cache-first) ──────────
+type AiSearchResult = { stores: StorePlan[]; pass1Failed: boolean; pass2Failed: boolean }
+
 async function searchNonApiStores(
   ingredients: IngredientLine[],
   body: PricePlanRequest,
   user: { avoid_stores?: string[]; avoid_brands?: string[]; default_location_label?: string | null; subscription_tier?: string } | null,
   provider: ReturnType<typeof getProvider>,
   excludeStores: string[]
-): Promise<StorePlan[]> {
+): Promise<AiSearchResult> {
   const avoidStores = [...(body.settings.avoidStores ?? []), ...(user?.avoid_stores ?? [])]
   const avoidBrands = [...(body.settings.avoidBrands ?? []), ...(user?.avoid_brands ?? [])]
   const addressLine = user?.default_location_label
@@ -386,12 +389,12 @@ ${itemLines}`
     })
   } catch (err) {
     console.error('[searchNonApiStores pass1] provider.complete threw:', err instanceof Error ? err.message : err)
-    return []
+    return { stores: [], pass1Failed: true, pass2Failed: false }
   }
 
   if (!researchResult) {
     console.error('[searchNonApiStores pass1] provider returned no result')
-    return []
+    return { stores: [], pass1Failed: true, pass2Failed: false }
   }
 
   console.log('[searchNonApiStores pass1] stopReason:', researchResult.stopReason,
@@ -400,7 +403,7 @@ ${itemLines}`
 
   if (researchResult.content.length < 100) {
     console.error('[searchNonApiStores pass1] research too short to format — aborting')
-    return []
+    return { stores: [], pass1Failed: true, pass2Failed: false }
   }
 
   // ── Pass 2 — Format via forced tool call ───────────────────────────────────
@@ -440,12 +443,12 @@ Emit the shopping plan now via record_shopping_plan.`
     })
   } catch (err) {
     console.error('[searchNonApiStores pass2] provider.complete threw:', err instanceof Error ? err.message : err)
-    return []
+    return { stores: [], pass1Failed: false, pass2Failed: true }
   }
 
   if (!formatResult) {
     console.error('[searchNonApiStores pass2] provider returned no result')
-    return []
+    return { stores: [], pass1Failed: false, pass2Failed: true }
   }
 
   console.log('[searchNonApiStores pass2] stopReason:', formatResult.stopReason,
@@ -455,7 +458,7 @@ Emit the shopping plan now via record_shopping_plan.`
   if (!recordCall) {
     console.error('[searchNonApiStores pass2] model did not call record_shopping_plan despite forced tool_choice. Text preview:',
       formatResult.content.slice(0, 300))
-    return []
+    return { stores: [], pass1Failed: false, pass2Failed: true }
   }
 
   const input = recordCall.input as { stores?: unknown[] } | null
@@ -480,7 +483,7 @@ Emit the shopping plan now via record_shopping_plan.`
     }
   }
 
-  return stores
+  return { stores, pass1Failed: false, pass2Failed: false }
 }
 
 // ── KV cache: bulk read + bulk write ─────────────────────────────────────────
@@ -617,7 +620,10 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   const walmartSearchResult = walmartSearchOutcome.status === 'fulfilled' ? walmartSearchOutcome.value : null
   // Unwrap Walmart items (search function now returns { items, ontologyFallback* })
   const walmartResult = walmartSearchResult ? walmartSearchResult.items : null
-  const aiStorePlans = aiSearchOutcome.status === 'fulfilled' ? aiSearchOutcome.value : []
+  const aiSearchResult = aiSearchOutcome.status === 'fulfilled' ? aiSearchOutcome.value : null
+  const aiStorePlans = aiSearchResult ? aiSearchResult.stores : []
+  const aiPass1Failed = aiSearchResult ? aiSearchResult.pass1Failed : aiSearchOutcome.status === 'rejected'
+  const aiPass2Failed = aiSearchResult ? aiSearchResult.pass2Failed : false
 
   // ── Ontology fallback diagnostics ────────────────────────────────────────
   const krogerFallbackUsed = krogerResult?.ontologyFallbackUsed ?? 0
@@ -628,6 +634,33 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   const totalFallbackSucceeded = krogerFallbackSucceeded + walmartFallbackSucceeded
   if (totalFallbackUsed > 0) {
     console.log('[ontology-fallback] used:', totalFallbackUsed, ', succeeded:', totalFallbackSucceeded)
+  }
+
+  // ── P3.1: Diagnostics accumulator — collect all counters for the response ─
+  const diagnostics: PlanDiagnostics = {
+    ai: {
+      pass1Failed: aiPass1Failed,
+      pass2Failed: aiPass2Failed,
+      candidateCount: aiStorePlans.flatMap(s => s.items).length,
+      proofUrlsValidated: 0,       // populated after validateUrls runs
+      proofUrlsContentVerified: 0, // populated after verifyProductContent runs
+      proofUrlsContentRejected: 0, // populated after verifyProductContent runs
+    },
+    sizeResolver: {
+      resolved: 0,                 // populated after resolveProductSize runs
+      bySource: { parseSize: 0, fdc: 0, off: 0, web_fetch: 0, web_search: 0 },
+      failed: 0,                   // populated after resolveProductSize runs
+    },
+    grader: {
+      specsGraded: 0,              // populated after gradeCandidates runs
+      totalCandidates: 0,          // populated after grading setup
+      cacheHits: 0,                // conservative — kept as 0
+      rejectedAsWrong: 0,          // populated after grades are attached to items
+    },
+    ontology: {
+      broaderTermsAttempted: totalFallbackUsed,
+      broaderTermsSucceeded: totalFallbackSucceeded,
+    },
   }
 
   console.log('[plan] results → kroger items:', krogerResult ? Object.keys(krogerResult.items).length : 'null',
@@ -788,6 +821,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     }
   }
   const verifiedUrls = await validateUrls(candidateUrls)
+  diagnostics.ai.proofUrlsValidated = verifiedUrls.size
 
   // Content-verify each HEAD-ok proofUrl: parse the page HTML and confirm
   // the product name + price actually appear. Failures downgrade to estimated.
@@ -809,6 +843,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   const totalChecked = verifiedContentByUrl.size
   const rejected = Array.from(verifiedContentByUrl.values()).filter(v => !v).length
   console.log('[ai-verify] summary', { totalChecked, rejected, rejectionRate: totalChecked ? rejected / totalChecked : 0 })
+  diagnostics.ai.proofUrlsContentVerified = totalChecked - rejected
+  diagnostics.ai.proofUrlsContentRejected = rejected
 
   const cacheWrites: Array<{ banner: string; ingredient: IngredientLine; value: CachedStoreItem }> = []
 
@@ -905,6 +941,10 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   // Run resolution for all items that still lack a pricedSize — parallel per-item.
   // Side-map tracks resolution source for future diagnostics surfacing (Phase 3).
   const sizeResolutionSources = new Map<string, string>()
+  // Count items eligible for resolution (pricedSize null and not notAvailable) before running
+  const sizeResolutionEligible = allStores.flatMap(store =>
+    store.items.filter(i => !i.notAvailable && i.pricedSize === null)
+  ).length
   await Promise.all(
     allStores.flatMap(store =>
       store.items
@@ -925,7 +965,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
             )
             if (resolved) {
               i.pricedSize = { quantity: resolved.quantity, unit: resolved.unit }
-              // Track source for diagnostics (Phase 3 will surface this)
+              // Track source for diagnostics (P3.1)
               sizeResolutionSources.set(
                 `${store.storeBannerNormalized}::${i.ingredientId}`,
                 resolved.source,
@@ -940,16 +980,18 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   )
 
   const resolvedCount = sizeResolutionSources.size
+  const sizeBySource = Object.fromEntries(
+    ['parseSize', 'fdc', 'off', 'web_fetch', 'web_search'].map(src => [
+      src,
+      Array.from(sizeResolutionSources.values()).filter(v => v === src).length,
+    ])
+  ) as PlanDiagnostics['sizeResolver']['bySource']
   if (resolvedCount > 0) {
-    console.log('[plan] size-resolver resolved', resolvedCount, 'items',
-      Object.fromEntries(
-        ['parseSize', 'fdc', 'off', 'web_fetch', 'web_search'].map(src => [
-          src,
-          Array.from(sizeResolutionSources.values()).filter(v => v === src).length,
-        ])
-      )
-    )
+    console.log('[plan] size-resolver resolved', resolvedCount, 'items', sizeBySource)
   }
+  diagnostics.sizeResolver.resolved = resolvedCount
+  diagnostics.sizeResolver.bySource = sizeBySource
+  diagnostics.sizeResolver.failed = Math.max(0, sizeResolutionEligible - resolvedCount)
 
   // Enforce maxStores
   const finalStores = allStores.slice(0, body.settings.maxStores)
@@ -1087,6 +1129,9 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
         cacheHits: graderCacheHits,
       })
     }
+    diagnostics.grader.specsGraded = graderCalls
+    diagnostics.grader.totalCandidates = totalCandidates
+    diagnostics.grader.cacheHits = graderCacheHits
 
     // Attach grades to items so P2.8 selectWinner can consume them.
     for (const store of finalStores) {
@@ -1099,6 +1144,12 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
         }
       }
     }
+
+    // Count items graded as 'wrong' before selectWinner discards them (P3.1)
+    diagnostics.grader.rejectedAsWrong = finalStores
+      .flatMap(s => s.items)
+      .filter(item => item.alignmentGrade?.category === 'wrong')
+      .length
 
     // Compute per-item winners and attach to the plan.
     planWinners = resolvedSpecs.map(spec => selectWinner(spec, finalStores, userProfile))
@@ -1193,7 +1244,9 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
         ? total > body.budget.amount
         : undefined,
       // M9: persist resolved specs for future reads / recompute-at-read
-      ...(resolvedSpecs ? { specs: resolvedSpecs } : {})
+      ...(resolvedSpecs ? { specs: resolvedSpecs } : {}),
+      // P3.1: backend diagnostics — size resolver, grader, ontology, AI passes
+      diagnostics,
     },
     ingredients,
     stores: finalStores,

@@ -61,6 +61,49 @@ export interface Env {
   INSTACART_IDP_API_KEY?: string
 }
 
+// ─── PlanDiagnostics — backend counters surfaced on ShoppingPlan.meta (P3.1) ──
+
+export interface PlanDiagnostics {
+  ai: {
+    /** true when pass-1 (research) threw or returned no result */
+    pass1Failed: boolean
+    /** true when pass-2 (format) threw or returned no result */
+    pass2Failed: boolean
+    /** total AI-store items across all stores (aiStorePlans.flatMap(s=>s.items).length) */
+    candidateCount: number
+    /** HEAD-validated proofUrls (validateUrls set size) */
+    proofUrlsValidated: number
+    /** proofUrls where verifyProductContent returned verified === true */
+    proofUrlsContentVerified: number
+    /** proofUrls where verifyProductContent returned verified === false */
+    proofUrlsContentRejected: number
+  }
+  sizeResolver: {
+    /** total items whose pricedSize was resolved by any tier */
+    resolved: number
+    /** count by resolution source */
+    bySource: Record<'parseSize' | 'fdc' | 'off' | 'web_fetch' | 'web_search', number>
+    /** items still null after all tiers (pricedSize remained null) */
+    failed: number
+  }
+  grader: {
+    /** number of specs that went through gradeCandidates */
+    specsGraded: number
+    /** total candidates across all graded specs */
+    totalCandidates: number
+    /** approximate cache hit count (conservative — 0 unless refactored further) */
+    cacheHits: number
+    /** items where alignmentGrade.category === 'wrong' after grading, before selectWinner */
+    rejectedAsWrong: number
+  }
+  ontology: {
+    /** sum of ontologyFallbackUsed across Kroger + Walmart */
+    broaderTermsAttempted: number
+    /** sum of ontologyFallbackSucceeded across Kroger + Walmart */
+    broaderTermsSucceeded: number
+  }
+}
+
 // ─── AlignmentGrade — LLM candidate grader output (P2.7) ─────────────────────
 
 /**
@@ -288,6 +331,11 @@ export interface ShoppingPlan {
      * Absent on legacy plans written before M8.
      */
     specs?: import('./spec.js').ShoppableItemSpec[]
+    /**
+     * Backend diagnostics — size resolver, grader, ontology, and AI pass counters.
+     * Populated on P3.1+ plans. Absent on legacy plans.
+     */
+    diagnostics?: PlanDiagnostics
   }
   ingredients: IngredientLine[]
   stores: StorePlan[]
