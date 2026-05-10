@@ -20,6 +20,7 @@ import type { ModelProvider } from '../providers/index.js'
 import { SpecCache } from './specCache.js'
 import { stripUnitNoise } from './queryStrip.js'
 import type { StoreAdapter } from '../integrations/StoreAdapter.js'
+import { parseIngredient } from './parseIngredient.js'
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -175,29 +176,20 @@ function buildMessages(
 // best-effort spec with confidence:'low'.
 
 export function naiveParse(rawText: string, id: string, priorTrace?: ResolutionTraceEntry[]): ShoppableItemSpec {
-  const trimmed = rawText.trim()
-  const tokens = trimmed.split(/\s+/)
+  const parsed = parseIngredient(rawText)
 
-  // If first token is a number, treat it as quantity
-  const firstNum = parseFloat(tokens[0] ?? '')
-  const quantity = !isNaN(firstNum) && firstNum > 0 ? firstNum : 1
-  const remainingTokens = !isNaN(parseFloat(tokens[0] ?? '')) ? tokens.slice(1) : tokens
-
-  // Strip unit noise (e.g. "lbs", "oz", "gal") from the display name so
-  // "3 lbs ground beef" → displayName "ground beef" not "lbs ground beef".
-  const rawDisplayName = remainingTokens.join(' ') || trimmed
-  const strippedDisplayName = stripUnitNoise(rawDisplayName)
-  const displayName = strippedDisplayName || rawDisplayName
-
+  // Use parseIngredient for structured name/quantity/unit extraction.
+  // stripUnitNoise is no longer needed — the parser handles unit removal from
+  // the display name as part of its structured parsing logic.
   return {
     id,
     sourceText: rawText,
-    displayName: displayName || rawText,
+    displayName: parsed.name || rawText,
     categoryPath: ['uncategorized'],
     brand: null,
     brandLocked: false,
-    quantity,
-    unit: 'each',
+    quantity: parsed.quantity,
+    unit: parsed.unit,
     // Cap to 3 entries to match validateSpec.max(3) invariant.
     // A caller supplying 4+ entries would silently violate the zod schema otherwise.
     resolutionTrace: (priorTrace ?? []).slice(0, 3),

@@ -17,7 +17,7 @@ function itemsToIngredients(items: ShoppingItem[]): IngredientLine[] {
     id: item.id,
     name: item.clarifiedName || item.name,
     quantity: item.quantity,
-    unit: item.unit || 'unit',
+    unit: item.unit || 'each',
     category: '',
     sources: []
   }))
@@ -28,6 +28,7 @@ export interface ShoppingItem {
   name: string
   quantity: number
   unit?: string
+  rawInput?: string
   clarifiedName?: string
   lastPurchased?: string
 }

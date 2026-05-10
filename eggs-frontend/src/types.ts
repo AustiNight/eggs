@@ -249,6 +249,7 @@ export interface ShoppingItem {
   name: string
   quantity: number
   unit?: string
+  rawInput?: string
   clarifiedName?: string
   lastPurchased?: string
 }

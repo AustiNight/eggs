@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Plus, X, Search, History, CheckSquare, Square, Trash2 } from 'lucide-react'
 import { ShoppingItem } from '../types'
 import { getHistory, removeFromHistory } from '../services/storageService'
+import { parseIngredient } from '../lib/parseIngredient'
 
 const generateId = () => Math.random().toString(36).substring(2, 9)
 
@@ -26,16 +27,16 @@ const ShoppingListInput: React.FC<ShoppingListInputProps> = ({ items, setItems, 
     const finalName = overrideName || inputValue
     if (!finalName.trim()) return
 
-    const parts = finalName.trim().split(' ')
-    let qty = overrideQty || 1
-    let name = finalName.trim()
-
-    if (!overrideQty && parts.length > 1 && !isNaN(Number(parts[0]))) {
-      qty = Number(parts[0])
-      name = parts.slice(1).join(' ')
+    const parsed = parseIngredient(finalName)
+    const newItem: ShoppingItem = {
+      id: generateId(),
+      name: parsed.name,
+      rawInput: parsed.rawInput,
+      quantity: overrideQty ?? parsed.quantity,
+      unit: parsed.unit,
     }
 
-    setItems(prev => [...prev, { id: generateId(), name, quantity: qty }])
+    setItems(prev => [...prev, newItem])
     if (!overrideName) setInputValue('')
   }
 
@@ -155,7 +156,7 @@ const ShoppingListInput: React.FC<ShoppingListInputProps> = ({ items, setItems, 
                 key={item.id}
                 className="group flex items-center gap-2 bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-600 hover:border-amber-400/50 transition-colors"
               >
-                <span className="font-mono text-amber-400 font-bold">{item.quantity}x</span>
+                <span className="font-mono text-amber-400 font-bold">{item.quantity} {item.unit}</span>
                 <span>{item.clarifiedName || item.name}</span>
                 <button
                   onClick={() => removeItem(item.id)}
