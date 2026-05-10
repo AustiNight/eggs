@@ -380,7 +380,10 @@ Do NOT emit JSON. Just plain-text per-store findings.`,
           role: 'user',
           content: `${addressLine}
 Search radius: ${body.settings.radiusMiles} miles
-Max stores to return: ${body.settings.maxStores}
+Stores covered by direct API search (already complete, do NOT research): ${excludeStores.length === 0 ? 'none' : excludeStores.join(', ')}.
+The user wants ${body.settings.maxStores} total stores compared.
+Additional stores you must find via research: ${Math.max(0, body.settings.maxStores - excludeStores.length)}.
+If fewer than that many distinct grocery banners exist within the chef's radius, return ONLY the real ones — never invent banners. Quality > quantity.
 Include delivery options: ${body.settings.includeDelivery}
 ${avoidStores.length ? `DO NOT include these stores: ${avoidStores.join(', ')}` : ''}
 ${avoidBrands.length ? `DO NOT include these brands: ${avoidBrands.join(', ')}` : ''}
@@ -1281,6 +1284,19 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     ...(planWinners ? { winners: planWinners } : {}),
     // M11: Instacart Recipe Page URL (absent when IDP key is missing or call failed)
     ...(instacartUrl ? { instacartUrl } : {})
+  }
+
+  // P4.1: Honest store-count — populate storeShortfall when fewer stores than requested
+  if (finalStores.length < body.settings.maxStores) {
+    let shortfallReason: 'no_additional_banners' | 'ai_pass1_failed' | 'ai_pass2_failed'
+    if (diagnostics.ai.pass1Failed) shortfallReason = 'ai_pass1_failed'
+    else if (diagnostics.ai.pass2Failed) shortfallReason = 'ai_pass2_failed'
+    else shortfallReason = 'no_additional_banners'
+    shoppingPlan.summary.storeShortfall = {
+      requested: body.settings.maxStores,
+      delivered: finalStores.length,
+      reason: shortfallReason,
+    }
   }
 
   // Persist plan

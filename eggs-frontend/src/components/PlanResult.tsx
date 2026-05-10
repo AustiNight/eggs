@@ -172,6 +172,23 @@ function BestBasketView({ plan, winners, onReset, eventId, getToken }: BestBaske
         )}
       </div>
 
+      {/* P4.1: Store-count shortfall notice */}
+      {plan.summary.storeShortfall && (
+        <div className="mb-3 px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs text-amber-200">
+          {(() => {
+            const { requested, delivered, reason } = plan.summary.storeShortfall
+            if (reason === 'no_additional_banners') {
+              return `We searched ${delivered} of the ${requested} stores you requested — only ${Math.max(0, delivered - 2)} additional grocery ${delivered - 2 === 1 ? 'banner was' : 'banners were'} available within your radius beyond the direct-API stores.`
+            }
+            if (reason === 'ai_pass1_failed') {
+              return `We searched ${delivered} stores. Our extended-store research couldn't run on this attempt — try again to compare ${requested} stores.`
+            }
+            // ai_pass2_failed
+            return `We searched ${delivered} stores. Our extended-store research couldn't complete formatting on this run — try again to compare ${requested} stores.`
+          })()}
+        </div>
+      )}
+
       {/* Best basket list */}
       <div>
         <h3 className="text-base font-semibold text-white mb-3 flex items-center gap-2">

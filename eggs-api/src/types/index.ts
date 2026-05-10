@@ -347,6 +347,12 @@ export interface ShoppingPlan {
     realPriceCount: number
     estimatedPriceCount: number
     narrative?: string
+    /** P4.1: present when fewer stores were delivered than the user requested. */
+    storeShortfall?: {
+      requested: number
+      delivered: number
+      reason: 'no_additional_banners' | 'ai_pass1_failed' | 'ai_pass2_failed'
+    }
   }
   /**
    * Best-value winners per item — computed server-side by selectWinner().
