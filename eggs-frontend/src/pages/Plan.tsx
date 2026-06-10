@@ -7,7 +7,7 @@ import ClarificationModal from '../components/ClarificationModal'
 import LoadingState, { PlanStatus } from '../components/LoadingState'
 import PlanResult from '../components/PlanResult'
 import SettingsPanel from '../components/SettingsPanel'
-import { clarifyIngredients, generatePlan, ApiError } from '../lib/api'
+import { clarifyIngredients, generatePlan, startCheckout, ApiError } from '../lib/api'
 import { saveToHistory } from '../services/storageService'
 import type { ShoppingPlan, PlanSettings, ClarificationRequest, IngredientLine, ShoppableItemSpecMirror, ClarifiedAttributes } from '../types'
 
@@ -56,6 +56,19 @@ export default function Plan() {
   const [plan, setPlan] = useState<ShoppingPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [limitReached, setLimitReached] = useState(false)
+  const [upgradeBusy, setUpgradeBusy] = useState(false)
+
+  const handleUpgrade = async () => {
+    setUpgradeBusy(true)
+    try {
+      const token = await getToken()
+      if (!token) { setUpgradeBusy(false); return }
+      await startCheckout(token) // redirects away on success
+    } catch {
+      setUpgradeBusy(false)
+      navigate('/settings')
+    }
+  }
 
   const handleStartProcess = async () => {
     setError(null)
@@ -263,11 +276,12 @@ export default function Plan() {
             </div>
 
             <button
-              onClick={() => navigate('/settings')}
+              onClick={handleUpgrade}
+              disabled={upgradeBusy}
               className="w-full py-3 rounded-xl font-bold text-sm transition-opacity hover:opacity-90"
-              style={{ backgroundColor: '#fbbf24', color: '#0f172a', boxShadow: '0 0 24px rgba(251,191,36,0.3)' }}
+              style={{ backgroundColor: '#fbbf24', color: '#0f172a', boxShadow: '0 0 24px rgba(251,191,36,0.3)', opacity: upgradeBusy ? 0.7 : 1 }}
             >
-              Upgrade to Pro
+              {upgradeBusy ? 'Redirecting…' : 'Upgrade to Pro'}
             </button>
 
             <button onClick={reset} className="w-full text-sm text-slate-500 hover:text-slate-300 transition-colors">

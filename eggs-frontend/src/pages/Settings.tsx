@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, UserButton } from '@clerk/clerk-react'
 import { ChevronLeft, X, Save } from 'lucide-react'
-import { getMe, updateMe } from '../lib/api'
+import { getMe, updateMe, startCheckout, openBillingPortal } from '../lib/api'
 import type { UserProfile } from '../types'
 
 export default function Settings() {
@@ -22,6 +22,40 @@ export default function Settings() {
   const [avoidStores, setAvoidStores] = useState<string[]>([])
   const [avoidBrandInput, setAvoidBrandInput] = useState('')
   const [avoidBrands, setAvoidBrands] = useState<string[]>([])
+
+  const [billingBusy, setBillingBusy] = useState(false)
+  const [billingNotice, setBillingNotice] = useState<'success' | 'cancelled' | null>(null)
+
+  // Read ?billing=success|cancelled from the redirect URL (additive banner only).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const b = params.get('billing')
+    if (b === 'success' || b === 'cancelled') setBillingNotice(b)
+  }, [])
+
+  const handleUpgrade = async () => {
+    setBillingBusy(true)
+    try {
+      const token = await getToken()
+      if (!token) { setBillingBusy(false); return }
+      await startCheckout(token) // redirects away on success
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to start checkout')
+      setBillingBusy(false)
+    }
+  }
+
+  const handleManageBilling = async () => {
+    setBillingBusy(true)
+    try {
+      const token = await getToken()
+      if (!token) { setBillingBusy(false); return }
+      await openBillingPortal(token) // redirects away on success
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to open billing portal')
+      setBillingBusy(false)
+    }
+  }
 
   useEffect(() => {
     getToken().then(token => {
@@ -78,6 +112,16 @@ export default function Settings() {
         <div className="flex items-center justify-center py-20" style={{ color: '#94a3b8' }}>Loading…</div>
       ) : (
         <form onSubmit={handleSave} className="max-w-lg mx-auto px-4 py-6 space-y-5">
+          {billingNotice && (
+            <div className="rounded-lg px-4 py-2 text-sm font-medium" style={{
+              backgroundColor: billingNotice === 'success' ? '#052e16' : '#1e293b',
+              border: `1px solid ${billingNotice === 'success' ? '#22c55e' : '#334155'}`,
+              color: billingNotice === 'success' ? '#22c55e' : '#94a3b8'
+            }}>
+              {billingNotice === 'success' ? "✓ You're on Pro!" : 'Checkout cancelled'}
+            </div>
+          )}
+
           {/* Account */}
           <section className="rounded-xl p-5 space-y-4" style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}>
             <h2 className="font-semibold text-white text-sm">Account</h2>
@@ -96,11 +140,32 @@ export default function Settings() {
                   {profile.subscription_tier === 'pro' ? 'Pro' : 'Free'}
                 </span>
                 {profile.subscription_tier === 'free' && (
-                  <button type="button" onClick={() => alert('Pro subscriptions coming soon!')} className="ml-3 text-xs font-semibold px-2 py-0.5 rounded-full"
-                    style={{ backgroundColor: '#fbbf24', color: '#0f172a', boxShadow: '0 0 18px rgba(251,191,36,0.45)' }}>
-                    Upgrade to Pro
+                  <button type="button" onClick={handleUpgrade} disabled={billingBusy} className="ml-3 text-xs font-semibold px-2 py-0.5 rounded-full"
+                    style={{ backgroundColor: '#fbbf24', color: '#0f172a', boxShadow: '0 0 18px rgba(251,191,36,0.45)', opacity: billingBusy ? 0.6 : 1 }}>
+                    {billingBusy ? 'Redirecting…' : 'Upgrade to Pro'}
                   </button>
                 )}
+              </div>
+            )}
+            {profile?.subscription_tier === 'pro' && (
+              <div className="space-y-2 pt-1">
+                {profile.subscription_status && (
+                  <div className="text-xs" style={{ color: '#94a3b8' }}>
+                    Status: <span className="font-semibold text-white">{profile.subscription_status}</span>
+                  </div>
+                )}
+                {profile.subscription_period_end && (
+                  <div className="text-xs" style={{ color: '#94a3b8' }}>
+                    {profile.subscription_status === 'canceled' ? 'Ends' : 'Renews'}{' '}
+                    <span className="font-semibold text-white">
+                      {new Date(profile.subscription_period_end).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+                <button type="button" onClick={handleManageBilling} disabled={billingBusy} className="text-xs font-semibold px-3 py-1 rounded-lg"
+                  style={{ backgroundColor: '#0f172a', color: '#fbbf24', border: '1px solid #334155', opacity: billingBusy ? 0.6 : 1 }}>
+                  {billingBusy ? 'Redirecting…' : 'Manage subscription'}
+                </button>
               </div>
             )}
           </section>

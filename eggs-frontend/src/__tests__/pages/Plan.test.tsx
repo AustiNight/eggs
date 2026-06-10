@@ -21,7 +21,8 @@ vi.mock('../../lib/api', async () => {
   return {
     ApiError,
     clarifyIngredients: vi.fn(),
-    generatePlan: vi.fn()
+    generatePlan: vi.fn(),
+    startCheckout: vi.fn()
   }
 })
 
@@ -54,10 +55,11 @@ Object.defineProperty(navigator, 'geolocation', { value: mockGeolocation, writab
 // ─── Import after mocks ───────────────────────────────────────────────────────
 
 import Plan from '../../pages/Plan'
-import { clarifyIngredients, generatePlan, ApiError } from '../../lib/api'
+import { clarifyIngredients, generatePlan, startCheckout, ApiError } from '../../lib/api'
 
 const mockClarify = vi.mocked(clarifyIngredients)
 const mockGenerate = vi.mocked(generatePlan)
+const mockStartCheckout = vi.mocked(startCheckout)
 
 function renderPlan() {
   return render(<MemoryRouter><Plan /></MemoryRouter>)
@@ -109,14 +111,15 @@ describe('Plan page — upgrade paywall', () => {
     expect(screen.queryByText(/You've hit your free limit/i)).not.toBeInTheDocument()
   })
 
-  it('"Upgrade to Pro" navigates to /settings', async () => {
+  it('"Upgrade to Pro" starts Stripe checkout', async () => {
     mockGenerate.mockRejectedValue(new ApiError(403, 'free_limit_reached'))
+    mockStartCheckout.mockResolvedValue(undefined)
     renderPlan()
 
     fireEvent.click(screen.getByTestId('start-search'))
     await waitFor(() => screen.getByRole('button', { name: /Upgrade to Pro/i }), { timeout: 3000 })
 
     fireEvent.click(screen.getByRole('button', { name: /Upgrade to Pro/i }))
-    expect(mockNavigate).toHaveBeenCalledWith('/settings')
+    await waitFor(() => expect(mockStartCheckout).toHaveBeenCalledWith('mock-token'))
   })
 })

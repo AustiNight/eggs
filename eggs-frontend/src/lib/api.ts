@@ -64,6 +64,34 @@ export const updateMe = (token: string, updates: Partial<UserProfile>) =>
     body: JSON.stringify(updates)
   })
 
+// ─── Billing ──────────────────────────────────────────────────────────────────
+
+/**
+ * Start a Stripe Checkout session for the Pro plan and redirect the browser to it.
+ * POSTs the current app origin so the API can build success/cancel URLs.
+ */
+export const startCheckout = async (token: string): Promise<void> => {
+  const { url } = await req<{ url: string }>('/api/billing/checkout', {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ appUrl: window.location.origin })
+  })
+  if (url) window.location.href = url
+}
+
+/**
+ * Open the Stripe customer billing portal and redirect the browser to it.
+ * POSTs the current app origin so the API can build the return URL.
+ */
+export const openBillingPortal = async (token: string): Promise<void> => {
+  const { url } = await req<{ url: string }>('/api/billing/portal', {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ appUrl: window.location.origin })
+  })
+  if (url) window.location.href = url
+}
+
 // ─── Events ───────────────────────────────────────────────────────────────────
 
 export interface CreateEventInput {
