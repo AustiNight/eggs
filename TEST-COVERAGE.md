@@ -260,6 +260,17 @@
 | `customer.subscription.deleted` → clears subscription_period_end (null) | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ Sec-review fix 4 |
 | `updateByCustomer` no-match (untracked customer) → no update, 200, warn logged | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ Sec-review fix 2 |
 | Handler DB error → 500 AND idempotency key NOT written; retry reprocesses | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ |
+| makeStripe → Workers-safe client (fetch http client, constructEventAsync present) | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/integrations/stripe.test.ts` | ✅ |
+| POST /checkout creates customer when none + persists id + returns checkout url + correct session args | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.test.ts` | ✅ |
+| POST /checkout reuses existing stripe_customer_id | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.test.ts` | ✅ |
+| POST /checkout 401 without auth | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.test.ts` | ✅ |
+| POST /portal returns portal url for a customer | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.test.ts` | ✅ |
+| POST /portal 400 when user has no stripe customer | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.test.ts` | ✅ |
+| startCheckout POSTs /api/billing/checkout w/ appUrl+Bearer, redirects to url | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-frontend/src/lib/api.billing.test.ts` | ✅ |
+| openBillingPortal POSTs /api/billing/portal w/ appUrl+Bearer, redirects to url | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-frontend/src/lib/api.billing.test.ts` | ✅ |
+| Settings: free profile → "Upgrade to Pro"; pro profile → "Manage subscription" + renewal date | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-frontend/src/pages/Settings.test.tsx` | ✅ |
+| Plan paywall "Upgrade to Pro" calls startCheckout (no dead-end) | Unit | ✅ | ➖ | ➖ | ➖ | `eggs-frontend/src/__tests__/pages/Plan.test.tsx` | ✅ |
+| Live: test-card checkout → webhook flips tier → portal cancel → reverts | E2E | 📋 | 📋 | ➖ | ➖ | `e2e/upgrade-paywall.spec.ts` | go-live checklist |
 
 ---
 
