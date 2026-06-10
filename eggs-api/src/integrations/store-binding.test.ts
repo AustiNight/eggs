@@ -48,30 +48,34 @@ describe('assertStoreBinding', () => {
     expect(assertStoreBinding("You're shopping Frisco North", noAddr)).toBe(true)
     expect(assertStoreBinding("You're shopping Dallas Central", noAddr)).toBe(false)
   })
-  it('A2: curly-apostrophe indicator still vetoes a wrong store even when store id appears in field context', () => {
-    const page = 'You’re shopping Victoria H-E-B! data-store-id="790"'
+  it('curly apostrophe indicator still vetoes a wrong store even when store id appears in field context', () => {
+    const page = "You're shopping Victoria H-E-B! data-store-id=\"790\""
     expect(assertStoreBinding(page, HEB_STORE)).toBe(false)
   })
-  it('A2b: curly-apostrophe indicator matches the right store', () => {
-    const page = 'You’re shopping Plano H-E-B!'
+  it('curly apostrophe indicator matches the right store', () => {
+    const page = "You're shopping Plano H-E-B!"
     expect(assertStoreBinding(page, HEB_STORE)).toBe(true)
   })
-  it('A3: token matching is word-bounded — "McAllen" must not match store "Allen"', () => {
+  it('token matching is word-bounded — "McAllen" must not match store "Allen"', () => {
     const allen: StoreIdentity = { banner: 'H-E-B', bannerNormalized: 'h-e-b', storeName: 'H-E-B Allen' }
     expect(assertStoreBinding("You're shopping McAllen H-E-B!", allen)).toBe(false)
     expect(assertStoreBinding("You're shopping Allen H-E-B!", allen)).toBe(true)
   })
-  it('A4: a single address street-token overlap is not sufficient (storeName token or >=2 address tokens required)', () => {
+  it('a single address street-token overlap is not sufficient (storeName token or >=2 address tokens required)', () => {
     expect(assertStoreBinding("You're shopping Dallas Central H-E-B!", HEB_STORE)).toBe(false)
     expect(assertStoreBinding("You're shopping Central Expy H-E-B!", HEB_STORE)).toBe(true)
   })
 })
 
 describe('getBindingRecipe', () => {
+  // TODO(spike): when the first real recipe is promoted to RECIPES, pin its kind + builder output here.
   it('returns a recipe object for every known banner (none is acceptable)', () => {
     const r = getBindingRecipe('h-e-b')
     expect(r).toBeDefined()
     expect(['url', 'cookie', 'actions', 'none']).toContain(r.kind)
+    // Verify self-normalizing: raw uppercase should behave identically to normalized
+    const rUpper = getBindingRecipe('H-E-B')
+    expect(rUpper).toEqual(r)
   })
   it('returns kind none for unknown banners', () => {
     expect(getBindingRecipe('bob grocery').kind).toBe('none')

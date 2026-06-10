@@ -53,8 +53,12 @@ export function bannerDomain(banner: string): string | null {
  */
 const RECIPES: Record<string, BindingRecipe> = {}
 
-export function getBindingRecipe(bannerNormalized: string): BindingRecipe {
-  return RECIPES[bannerNormalized] ?? { kind: 'none' }
+/**
+ * Get the binding recipe for a banner. Normalizes the banner internally,
+ * matching the behavior of bannerDomain().
+ */
+export function getBindingRecipe(banner: string): BindingRecipe {
+  return RECIPES[normalizeBanner(banner)] ?? { kind: 'none' }
 }
 
 /**
@@ -68,12 +72,12 @@ function normalizeText(s: string): string {
 }
 
 /** Generic words that never distinguish one location of a banner from another. */
-const GENERIC_STOP_TOKENS = new Set(['the', 'and', 'store', 'market', 'plus', 'h-e-b', 'heb'])
+const GENERIC_STOP_TOKENS = new Set(['the', 'and', 'store', 'market', 'plus', 'h', 'e', 'b', 'heb'])
 
 /** Stop tokens for a store: generic words + the banner's own words (part of every location's name). */
 function bannerStopTokens(store: StoreIdentity): Set<string> {
   const stop = new Set(GENERIC_STOP_TOKENS)
-  for (const w of normalizeText(store.banner).split(/[^a-z0-9-]+/)) {
+  for (const w of normalizeText(store.banner).split(/[^a-z0-9]+/)) {
     if (w) stop.add(w)
   }
   return stop
@@ -94,6 +98,7 @@ function distinctiveTokens(source: string, stop: Set<string>): string[] {
 }
 
 /** "You're shopping <label>" / "My Store: <label>" — label runs to '!', '.', or newline. */
+// Runs against normalizeText() output — curly apostrophes already folded to ASCII. The '? also tolerates "youre" with no apostrophe at all.
 const INDICATOR_RE = /(?:you'?re shopping|my store:?|your store:?)\s+([^!\n.]{2,60})/i
 
 /** retailerStoreId appearing as a store-id field, not as a bare number in prose. */
