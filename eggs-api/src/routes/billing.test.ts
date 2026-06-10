@@ -27,6 +27,25 @@ function supa(row: any, updateSpy = vi.fn().mockResolvedValue({ error: null })) 
   }
 }
 
+describe('billing dormant when Stripe unconfigured', () => {
+  beforeEach(() => vi.clearAllMocks())
+  const UNCONFIGURED = { ...ENV, STRIPE_SECRET_KEY: '', STRIPE_PRO_PRICE_ID: '' }
+
+  it('checkout → 503 billing_unavailable when no Stripe key/price', async () => {
+    const app = new Hono(); app.route('/', billing)
+    const res = await app.request('/checkout', { method: 'POST', headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' }, body: '{}' }, UNCONFIGURED)
+    expect(res.status).toBe(503)
+    expect((await res.json() as { error: string }).error).toBe('billing_unavailable')
+    expect(fakeStripe.checkout.sessions.create).not.toHaveBeenCalled()
+  })
+
+  it('portal → 503 billing_unavailable when no Stripe key/price', async () => {
+    const app = new Hono(); app.route('/', billing)
+    const res = await app.request('/portal', { method: 'POST', headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' }, body: '{}' }, UNCONFIGURED)
+    expect(res.status).toBe(503)
+  })
+})
+
 describe('POST /checkout', () => {
   beforeEach(() => vi.clearAllMocks())
 

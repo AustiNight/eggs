@@ -71,12 +71,20 @@ export const updateMe = (token: string, updates: Partial<UserProfile>) =>
  * POSTs the current app origin so the API can build success/cancel URLs.
  */
 export const startCheckout = async (token: string): Promise<void> => {
-  const { url } = await req<{ url: string }>('/api/billing/checkout', {
-    token,
-    method: 'POST',
-    body: JSON.stringify({ appUrl: window.location.origin })
-  })
-  if (url) window.location.href = url
+  try {
+    const { url } = await req<{ url: string }>('/api/billing/checkout', {
+      token,
+      method: 'POST',
+      body: JSON.stringify({ appUrl: window.location.origin })
+    })
+    if (url) window.location.href = url
+  } catch (err) {
+    // Billing not yet configured (Stripe env unset) → friendly message.
+    if (err instanceof ApiError && err.status === 503) {
+      throw new Error('Pro upgrades are coming soon — billing isn’t live yet.')
+    }
+    throw err
+  }
 }
 
 /**
@@ -84,12 +92,19 @@ export const startCheckout = async (token: string): Promise<void> => {
  * POSTs the current app origin so the API can build the return URL.
  */
 export const openBillingPortal = async (token: string): Promise<void> => {
-  const { url } = await req<{ url: string }>('/api/billing/portal', {
-    token,
-    method: 'POST',
-    body: JSON.stringify({ appUrl: window.location.origin })
-  })
-  if (url) window.location.href = url
+  try {
+    const { url } = await req<{ url: string }>('/api/billing/portal', {
+      token,
+      method: 'POST',
+      body: JSON.stringify({ appUrl: window.location.origin })
+    })
+    if (url) window.location.href = url
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 503) {
+      throw new Error('Billing isn’t live yet.')
+    }
+    throw err
+  }
 }
 
 // ─── Events ───────────────────────────────────────────────────────────────────

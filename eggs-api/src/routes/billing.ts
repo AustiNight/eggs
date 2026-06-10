@@ -11,7 +11,15 @@ function appUrlFrom(body: { appUrl?: string }, fallback = 'https://priceofeggs.o
   return typeof u === 'string' && /^https?:\/\//.test(u) ? u.replace(/\/$/, '') : fallback
 }
 
+/** Billing is dormant until Stripe is configured (key + price). Keeps the
+ *  upgrade button from erroring in a prod env where Stripe isn't set up yet —
+ *  the frontend renders a graceful "coming soon" on this 503. */
+function billingConfigured(env: HonoEnv['Bindings']): boolean {
+  return Boolean(env.STRIPE_SECRET_KEY) && Boolean(env.STRIPE_PRO_PRICE_ID)
+}
+
 billing.post('/checkout', requireAuth, async (c) => {
+  if (!billingConfigured(c.env)) return c.json({ error: 'billing_unavailable' }, 503)
   const userId = c.get('userId')
   const body = await c.req.json().catch(() => ({})) as { appUrl?: string }
   const appUrl = appUrlFrom(body)
@@ -41,6 +49,7 @@ billing.post('/checkout', requireAuth, async (c) => {
 })
 
 billing.post('/portal', requireAuth, async (c) => {
+  if (!billingConfigured(c.env)) return c.json({ error: 'billing_unavailable' }, 503)
   const userId = c.get('userId')
   const body = await c.req.json().catch(() => ({})) as { appUrl?: string }
   const appUrl = appUrlFrom(body)
