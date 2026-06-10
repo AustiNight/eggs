@@ -4,6 +4,7 @@ import { fireEvent } from '@testing-library/react'
 import DiagnosticsDisclosure from './DiagnosticsDisclosure'
 import type { PlanDiagnostics } from '../types'
 
+// discovery absent: tests legacy-plan rendering (discovery? is optional)
 const empty: PlanDiagnostics = {
   ai: { pass1Failed: false, pass2Failed: false, candidateCount: 0, proofUrlsValidated: 0, proofUrlsContentVerified: 0, proofUrlsContentRejected: 0 },
   sizeResolver: { resolved: 0, bySource: { parseSize: 0, fdc: 0, off: 0, web_fetch: 0, web_search: 0 }, failed: 0 },

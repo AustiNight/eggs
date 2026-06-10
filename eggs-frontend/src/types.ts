@@ -3,6 +3,8 @@
 export type EventStatus = 'planning' | 'shopping' | 'reconcile_needed' | 'complete'
 export type PriceSource = 'kroger_api' | 'walmart_api' | 'ai_estimated'
 export type Confidence = 'real' | 'estimated_with_source' | 'estimated'
+/** Mirror of eggs-api Provenance — item-level price provenance (WS1). */
+export type Provenance = 'api' | 'store_page_verified' | 'page_verified_unbound' | 'shopping_index' | 'model_estimate'
 
 // ─── M9: Best-basket winner types (frontend mirror of bestValue.ts) ───────────
 // Uses `string` for units to keep UI decoupled from backend's CanonicalUnit.
@@ -187,7 +189,7 @@ export interface StoreItem {
    */
   pricedSize?: { quantity: number; unit: string } | null
   /** WS1 honesty contract. Absent on legacy plans — UI falls back to `confidence`. */
-  provenance?: 'api' | 'store_page_verified' | 'page_verified_unbound' | 'shopping_index' | 'model_estimate'
+  provenance?: Provenance
   /** Epoch ms when the price was last verified/fetched (also set from cache writes). */
   verifiedAt?: number
   /** retailerStoreId the binding assertion confirmed, when provenance==='store_page_verified'. */

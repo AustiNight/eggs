@@ -289,6 +289,7 @@ export interface StoreIdentity {
 
 /**
  * Price provenance — the honesty contract (spec WS1).
+ * Item-level counterpart to StorePlan.priceSource; takes precedence for UI display when present.
  * 'api'                  — Kroger/Walmart API result.
  * 'store_page_verified'  — exact price verified on a product page fetched BOUND
  *                          to the chef's discovered store (binding assertion passed).
