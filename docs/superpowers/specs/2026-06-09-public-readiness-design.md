@@ -38,57 +38,100 @@ Verified by reading code and live API smoke tests on 2026-06-09:
     snippet. Good for product-URL resolution (`include_domains` per banner).
   - **Firecrawl** `/v2/scrape`: fetched the heb.com product page through the bot wall on the
     **basic proxy** (1 credit); exact price `$4.98 each ($0.50/oz)` and size `10 oz` present in
-    returned markdown. Caveat observed: page rendered with "Victoria H-E-B" store context —
-    **scraped prices are store-location-dependent** and may differ from the chef's local store.
+    returned markdown. Critical observation: page rendered with "Victoria H-E-B" store context —
+    an unbound fetch returns **some arbitrary store's price, not the chef's store's price**.
+    This drives the store-scoped verification requirement below. Firecrawl supports custom
+    `Cookie` headers and pre-scrape `actions` (click/write/executeJavascript/wait) on `/scrape`,
+    plus an `/interact` endpoint for stateful flows — confirmed via Firecrawl docs-search
+    2026-06-09 — so fetches CAN be bound to a specific store.
 
 ---
 
 ## WS1 — Verifiable AI prices
 
-### Pipeline (per non-API banner × ingredient)
+### Store-scoped verification (hard requirement)
+
+A price presented as a store's price MUST come from a fetch bound to a concrete store inside
+the chef's distance-bound search — never from whatever store context a scraper's IP happens to
+land on. Components:
+
+1. **StoreIdentity** — store discovery must yield concrete stores, not just banners:
+   `{ banner, storeName, address, lat, lng, distanceMiles, retailerStoreId? }`.
+   `retailerStoreId` resolved via per-banner store-locator adapters (most retailers expose
+   unauthenticated JSON store-locator endpoints); Serper `/places` and/or existing LLM
+   discovery supply name + address to match against the locator.
+2. **Store-binding registry** (`integrations/store-binding.ts`) — per banner, a recipe for
+   scoping a product-page fetch to a specific store:
+   - `url` — store ID encoded in URL/query param (cheapest)
+   - `cookie` — known store-selection cookie recipe; usable by BOTH direct Worker fetch and
+     Firecrawl (`headers: { Cookie: ... }`)
+   - `actions` — Firecrawl actions script (enter zip → select store → wait) before capture;
+     `/interact` as escalation for stateful flows
+   - `none` — binding not yet supported for this banner
+3. **Binding assertion** — recipes are never trusted blindly. The verifier checks the rendered
+   page's store indicator (e.g. H-E-B's "You're shopping {storeName}" banner text or store ID
+   in the page payload) matches the expected StoreIdentity. content-verifier's checks become:
+   exact price + name coverage + **store binding confirmed**.
+4. **Sprint 0 spike** — establish and validate binding recipes for priority banners
+   (H-E-B / Central Market, Tom Thumb + Albertsons family, Target, Sprouts, Aldi,
+   Trader Joe's; Kroger family already store-bound via API `locationId`). Each banner ships
+   only after its recipe passes an automated binding-assertion test. Banners without a working
+   recipe stay at `estimate` tier — honestly labeled, never silently wrong.
+
+Note: Walmart affiliate API returns walmart.com e-commerce prices (purchasable for
+pickup/delivery from the chef's store, but not shelf-verified) — label "Walmart.com price" in
+the UI for the same honesty standard.
+
+### Pipeline (per non-API store × ingredient)
 
 ```
-Store discovery (unchanged: LLM pass 1; optional Serper /places upgrade later)
-  └─ for each (banner, ingredient):
+Store discovery → StoreIdentity[] (LLM pass 1 + store-locator adapters;
+                                   optional Serper /places upgrade later)
+  └─ for each (storeIdentity, ingredient):
      1. DISCOVER   Serper /shopping (q="{ingredient} {banner}", location bias)
-                   → candidate {title, price, merchant}; filter to merchant == banner
+                   → candidate {title, price, merchant}; filter to merchant == banner.
+                   Index prices are NEVER store-trusted — candidates only.
      2. RESOLVE    Tavily /search (query=product title, include_domains=[banner domain])
                    → merchant product-page URL candidates
-     3. VERIFY     fetch product page: direct fetch → on 403/429/challenge,
-                   Firecrawl /v2/scrape (proxy:auto, formats:[markdown], timeout:9000)
-                   → run existing exact-price + name-coverage check against content
-     4. FALLBACK   existing Anthropic two-pass research for banners/items steps 1–3
-                   couldn't source (and as the only path when Serper/Tavily keys absent)
+     3. VERIFY     store-bound fetch of product page (binding recipe applied):
+                   direct fetch w/ cookie recipe → on 403/429/challenge or actions-required,
+                   Firecrawl /v2/scrape (proxy:auto, headers/actions per recipe,
+                   formats:[markdown], timeout:9000)
+                   → exact-price + name-coverage + binding-assertion checks
+     4. FALLBACK   existing Anthropic two-pass research for items steps 1–3 couldn't source
+                   (and the only path when Serper/Tavily keys absent). Its results are
+                   subject to the same verification — unverified = estimate tier.
 ```
 
 New modules: `integrations/serper.ts`, `integrations/tavily.ts`, `integrations/firecrawl.ts`,
-orchestrated by `lib/price-discovery.ts`. `content-verifier.ts` refactored to accept
-pre-fetched content (so one fetch serves both Firecrawl fallback and verification).
-Each integration degrades gracefully when its key/env is missing.
+`integrations/store-binding.ts` (+ per-banner locator adapters), orchestrated by
+`lib/price-discovery.ts`. `content-verifier.ts` refactored to accept pre-fetched content and
+the expected StoreIdentity. Each integration degrades gracefully when its key/env is missing.
 
 ### Honesty rules (the contract)
 
-- A row may display a price **only** with provenance:
-  - `verified` — Kroger/Walmart API, **or** exact-price-verified against a fetched product
-    page. Link goes to the product page. (Replaces `real`.)
-  - `sourced` — price came from Serper Shopping (Google's index) and a product page was
-    resolved, but page verification of the exact price failed/was unavailable. Link goes to the
-    product page, never a search page. (Replaces legitimate `estimated_with_source`.)
-  - `estimate` — no source. Price rendered de-emphasized with explicit "estimate — no source
-    found" copy; link (if any) is the search-landing URL, visually presented as
-    "search at store →", not as a product link.
+- A row may display a confidently-styled price **only** with store-scoped provenance:
+  - `verified` — Kroger API (store-bound by locationId), **or** exact-price-verified against a
+    store-bound fetched product page whose binding assertion passed. Link goes to the product
+    page. (Replaces `real`.)
+  - `sourced` — a real product page was resolved and fetched, price verified on page, but the
+    fetch could not be store-bound (recipe `none` or assertion failed) — OR price comes only
+    from Serper's shopping index. Displayed de-emphasized with explicit copy
+    "online price — not confirmed for {storeName}". Counts toward estimated subtotal only.
+  - `estimate` — no source. De-emphasized, "estimate — no source found"; link (if any) is the
+    search-landing URL presented as "search at store →", never styled as a product link.
 - **Search-landing URLs never accompany a confidently-styled price.** `plan.ts:892` downgrade
   path → `estimate`, not `estimated_with_source`.
 - Wire format: keep `confidence: 'real' | 'estimated_with_source' | 'estimated'` enum values
-  (avoid breaking stored plans/UI), add `verifiedAt?: number` and `priceSource detail` to
-  StoreItem; frontend maps them to the three labels above. New field
-  `provenance?: 'api' | 'page_verified' | 'shopping_index' | 'model_estimate'`.
-- **Cache transparency:** cached items retain provenance + `verifiedAt`; UI shows "checked Nh
+  (avoid breaking stored plans/UI); add `provenance?: 'api' | 'store_page_verified' |
+  'page_verified_unbound' | 'shopping_index' | 'model_estimate'`, `verifiedAt?: number`, and
+  `verifiedStoreId?: string` to StoreItem; frontend maps to the three labels above.
+- **Cache transparency:** cache key gains the store dimension (`item:v2:{banner}:{storeId}:
+  {ingredient-hash}`); cached items retain provenance + `verifiedAt`; UI shows "checked Nh
   ago". Cache hits no longer overwrite provenance fields blindly. TTL stays 24h.
 - Plan summary splits **verified subtotal vs. estimated subtotal** — the number a chef can
-  defend to a client is explicit.
-- Disclosure: store-location caveat ("online price; your store may vary") on `sourced`/scraped
-  rows.
+  defend to a client is explicit. Only store-bound (`verified`) prices enter the verified
+  subtotal.
 
 ### Cost guardrails
 
@@ -101,10 +144,14 @@ existing `maxSearches` pattern; Pro gets headroom. All counts logged into `PlanD
 
 - Zero rows in a generated plan where a non-API price displays confidently with a
   search-landing link.
-- ≥80% of non-API rows for major banners (Target, H-E-B, Albertsons-family, Sprouts) reach
-  `verified` or `sourced` in a Dallas-area test plan.
-- Every `verified` row's link opens the exact product page containing the displayed price.
-- Plan generation stays under the Worker timeout (per-item ceilings preserved).
+- **Zero rows labeled `verified` whose price was fetched without a passing store-binding
+  assertion against a store inside the search radius.**
+- For banners with shipped binding recipes, ≥70% of non-API rows reach `verified` in a
+  Dallas-area test plan; remaining rows are honestly `sourced`/`estimate`.
+- Every `verified` row's link opens the exact product page containing the displayed price,
+  scoped to the chef's store where the retailer's site supports store context.
+- Plan generation stays under the Worker timeout (per-item ceilings preserved; binding
+  recipes add bounded latency — actions-based fetches are budgeted like stealth fetches).
 
 ---
 
