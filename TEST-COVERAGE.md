@@ -295,8 +295,20 @@
 | verifyContentText: verified true but storeBound false on wrong-store indicator | Unit | ✅ | `src/lib/content-verifier.test.ts` | honesty contract — price can verify, binding still rejected |
 | verifyContentText: markdown link noise stripped before matching | Unit | ✅ | `src/lib/content-verifier.test.ts` | Firecrawl markdown input (Task 8 orchestrator) |
 | verifyContentText: reason 'price_not_found' when exact price missing | Unit | ✅ | `src/lib/content-verifier.test.ts` | |
+| discoverPrice: store_page_verified when binding assertion passes | Unit | ✅ | `src/lib/price-discovery.test.ts` | honesty contract — counters asserted |
+| discoverPrice: caps at page_verified_unbound when page shows a different store | Unit | ✅ | `src/lib/price-discovery.test.ts` | honesty contract |
+| discoverPrice: prefers direct fetch over Firecrawl when it returns verifiable content | Unit | ✅ | `src/lib/price-discovery.test.ts` | cost guard — no Firecrawl spend |
+| discoverPrice: shopping_index when Tavily URL resolution returns nothing | Unit | ✅ | `src/lib/price-discovery.test.ts` | |
+| discoverPrice: shopping_index when Tavily dep absent (no key) | Unit | ✅ | `src/lib/price-discovery.test.ts` | graceful degradation |
+| discoverPrice: shopping_index when fetched page fails exact-price verify | Unit | ✅ | `src/lib/price-discovery.test.ts` | honesty contract |
+| discoverPrice: shopping_index when both fetch paths fail | Unit | ✅ | `src/lib/price-discovery.test.ts` | |
+| discoverPrice: null when no Serper candidate matches the banner | Unit | ✅ | `src/lib/price-discovery.test.ts` | |
+| discoverPrice: null when all Serper candidates lack prices | Unit | ✅ | `src/lib/price-discovery.test.ts` | |
+| discoverPrice: null when Serper dep absent (no key) | Unit | ✅ | `src/lib/price-discovery.test.ts` | graceful degradation |
+| discoverPrice: prefers product-detail URL over category/search from Tavily | Unit | ✅ | `src/lib/price-discovery.test.ts` | |
+| discoverPrice: applies cookie binding recipe headers to direct fetch | Unit | ✅ | `src/lib/price-discovery.test.ts` | store-scoping |
 
-Section grows as WS1 tasks land (store-binding, price-discovery, plan wiring, UI).
+Section grows as WS1 tasks land (plan wiring, UI).
 
 ---
 
