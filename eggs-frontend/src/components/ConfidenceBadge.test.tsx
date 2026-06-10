@@ -18,9 +18,9 @@ describe('ConfidenceBadge — WS1 provenance mapping', () => {
     expect(screen.getByText('Online price')).toBeInTheDocument()
   })
 
-  it('shopping_index → Online price', () => {
+  it('shopping_index → Online est. (no openable product page)', () => {
     render(<ConfidenceBadge confidence="estimated_with_source" provenance="shopping_index" />)
-    expect(screen.getByText('Online price')).toBeInTheDocument()
+    expect(screen.getByText('Online est.')).toBeInTheDocument()
   })
 
   it('model_estimate → Est.', () => {

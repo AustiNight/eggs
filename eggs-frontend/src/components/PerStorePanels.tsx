@@ -54,8 +54,11 @@ function ItemRow({ item }: { item: StoreItem }) {
               )}
             </span>
           )}
-          {(item.provenance === 'page_verified_unbound' || item.provenance === 'shopping_index') && (
+          {item.provenance === 'page_verified_unbound' && (
             <span className="text-[10px] text-slate-500 italic">online price — not confirmed for this store</span>
+          )}
+          {item.provenance === 'shopping_index' && (
+            <span className="text-[10px] text-slate-500 italic">price seen online — no listing to open</span>
           )}
           {item.provenance === 'model_estimate' && (
             <span className="text-[10px] text-slate-500 italic">estimate — no source found</span>
@@ -68,7 +71,7 @@ function ItemRow({ item }: { item: StoreItem }) {
       <td className="py-3 text-center text-slate-400">
         {item.quantity} <span className="text-slate-600 text-xs">{item.unit}</span>
       </td>
-      <td className={`py-3 text-right font-mono font-bold ${item.provenance === 'model_estimate' ? 'text-slate-500' : 'text-amber-400/90'}`}>
+      <td className={`py-3 text-right font-mono font-bold ${item.provenance === 'model_estimate' || item.provenance === 'shopping_index' ? 'text-slate-500' : 'text-amber-400/90'}`}>
         ${item.unitPrice.toFixed(2)}
       </td>
       <td className="py-3 text-center">

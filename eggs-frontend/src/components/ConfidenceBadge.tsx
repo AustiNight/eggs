@@ -20,8 +20,12 @@ export const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
 export const PROVENANCE_LABELS: Record<string, { label: string; color: string }> = {
   api:                   { label: 'Verified',     color: '#34d399' },
   store_page_verified:   { label: 'Verified',     color: '#34d399' },
+  // "Online price" is reserved for rows that link to a real product listing
+  // (page fetched + exact price confirmed on it), just not store-scoped.
   page_verified_unbound: { label: 'Online price', color: '#fbbf24' },
-  shopping_index:        { label: 'Online price', color: '#fbbf24' },
+  // shopping_index has a price from an online listing index but NO openable
+  // product page — estimate-tier (gray), but distinct from a pure model guess.
+  shopping_index:        { label: 'Online est.',  color: '#94a3b8' },
   model_estimate:        { label: 'Est.',         color: '#94a3b8' },
 }
 
