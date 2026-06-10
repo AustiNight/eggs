@@ -50,6 +50,11 @@ export function bannerDomain(banner: string): string | null {
  * Per-banner binding recipes. Spike-validated entries only — everything else
  * stays 'none'. DO NOT add a recipe without an assertStoreBinding-passing
  * probe run recorded in docs/superpowers/research/.
+ *
+ * Sprint-0 spike (2026-06-09, docs/superpowers/research/2026-06-store-binding-findings.md)
+ * tried H-E-B, Central Market, Tom Thumb, Target, Sprouts, Aldi, Trader Joe's.
+ * NO recipe cracked a real store binding — every banner caps at
+ * page_verified_unbound. RECIPES stays empty by design.
  */
 const RECIPES: Record<string, BindingRecipe> = {}
 

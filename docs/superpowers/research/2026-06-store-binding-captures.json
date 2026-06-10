@@ -1,0 +1,174 @@
+[
+  {
+    "banner": "H-E-B",
+    "domain": "heb.com",
+    "staple": "organic whole milk",
+    "unboundScrapeOk": true,
+    "unboundIndicators": [
+      {
+        "pattern": "you'?re shopping[^!\\n.]{0,80}",
+        "match": "You're shopping Victoria H‑E‑B plus",
+        "snippet": " 6g\n\n  - Vitamin A\n    - 8%\n  - Calcium\n    - 20%\n  - Vitamin C\n    - 0%\n  - Iron\n    - 2%\n\n#### Ingredients\n\nOrganic Cultured Grade A Milk, Organic Cream.\n\n- ## Instructions\n\n- ## More information\n\nYou're shopping Victoria H‑E‑B plus!\n\nNot your H-E-B? Select your preferred location."
+      }
+    ],
+    "leverResults": [
+      {
+        "lever": "cookie:CURR_SESSION_STORE",
+        "ok": true,
+        "indicators": [
+          {
+            "pattern": "you'?re shopping[^!\\n.]{0,80}",
+            "match": "You're shopping Victoria H‑E‑B plus",
+            "snippet": " 6g\n\n  - Vitamin A\n    - 8%\n  - Calcium\n    - 20%\n  - Vitamin C\n    - 0%\n  - Iron\n    - 2%\n\n#### Ingredients\n\nOrganic Cultured Grade A Milk, Organic Cream.\n\n- ## Instructions\n\n- ## More information\n\nYou're shopping Victoria H‑E‑B plus!\n\nNot your H-E-B? Select your preferred location."
+          }
+        ],
+        "changed": false,
+        "note": "H-E-B store-id cookie guess (38 = a Dallas-area store) | header=CURR_SESSION_STORE=38"
+      },
+      {
+        "lever": "actions:zip-store-select",
+        "ok": true,
+        "indicators": [
+          {
+            "pattern": "(?:my|your|current|selected)\\s+store[:\\s][^!\\n.]{0",
+            "match": "Selected Store",
+            "snippet": "s!\n\n6106 N. Navarro, Victoria, TX 77904-1767\n\n[Store details](https://www.heb.com/heb-store/tx/victoria/victoria-h-e-b-plus--92)\n\nNext available pickup time is today\n\nVictoria H-E-B plus! Selected Store\n\n![Map image of Victoria H-E-B plus!'s location](https://maps.googleapis.com/maps/api/staticmap?center=28.85178%2C-96.99499&key=AIzaSyAcEXE47R7PrFAZSAZOsQoNfaV6_fK9GGc&markers=anchor%3Acenter%7Cicon%3Ahttps%3A%2F%2Fcx.static.heb.com%2Fheb-map-pin.png%7C28.85178%2C-96.99499&scale=2&s"
+          },
+          {
+            "pattern": "store #?\\d{2,6}",
+            "match": "Store 59",
+            "snippet": "1505 East Rio Grande, Victoria, TX 77901-6220\n\n3.16 miles away [Store details](https://www.heb.com/heb-store/tx/victoria/59-and-laurent-h-e-b-554)\n\nNext available pickup time is today\n\nSelect Store 59 and Laurent H-E-B\n\n![Map image of 59 and Laurent H-E-B's location](https://maps.googleapis.com/maps/api/staticmap?center=28.8062%2C-96.9896&key=AIzaSyAcEXE47R7PrFAZSAZOsQoNfaV6_fK9GGc&markers=anchor%3Acenter%7Cicon%3Ahttps%3A%2F%2Fcx.static.heb.com%2Fheb-map-pin.png%7C28.8062%2C-96.9896&s"
+          },
+          {
+            "pattern": "(?:set|choose|select) (?:a |your )?store",
+            "match": "Select a store",
+            "snippet": "\n\n  - Vitamin A\n    - 8%\n  - Calcium\n    - 20%\n  - Vitamin C\n    - 0%\n  - Iron\n    - 2%\n\n#### Ingredients\n\nOrganic Cultured Grade A Milk, Organic Cream.\n\n- ## Instructions\n\n- ## More information\n\n## Select a store\n\nSearch by street address, city, or zip code\n\nSearch\n\nUse my current location\n\n25 stores near \"Victoria H-E-B plus!\"\n\n1. ## Victoria H‑E‑B plus!\n\n6106 N. Navarro, Victoria, TX 77904-1767\n\n[Store details](https://www.heb.com/heb-store/tx/victoria/victoria-h-e-b-plus--92)\n\nNex"
+          }
+        ],
+        "changed": true,
+        "note": "open store picker, type ZIP, wait for store list"
+      }
+    ],
+    "verdict": "recipe candidate (actions:zip-store-select): indicator changed to \"Selected Store\" — VALIDATE assertStoreBinding before promoting",
+    "candidateTitle": "Kalona Organic Whole Milk",
+    "candidatePrice": 7.29,
+    "productUrl": "https://www.heb.com/product-detail/kalona-supernatural-organic-whole-milk-plain-yogurt/1279801",
+    "unboundSnippet": "[Skip To Content](https://www.heb.com/product-detail/kalona-supernatural-organic-whole-milk-plain-yogurt/1279801#r_body)\n\n[Kalona Supernatural](https://www.heb.com/brand/kalona-supernatural/b623i3pWQCLfxOdoEBQZXhTdd5guC)\n\n# Kalona Supernatural Organic Whole Milk Plain Yogurt\n\n24 oz\n\n$4.44 each($0.18 / oz)\n\nPrices may vary between in-store, curbside, and delivery.\n\nNot sold at store\n\nAddKalona Supernatural Organic Whole Milk Plain Yogurtto list\n\nFind in-stock nearby\n\n[Skip Shop similar items carousel](https://www.heb.com/product-detail/kalona-supernatural-organic-whole-milk-plain-yogurt/1279801#)\n\n## Shop similar items\n\n- [![H-E-B Organics Whole Milk Yogurt - Vanilla](https://images.heb.com/is/image/HEBGrocery/prd-medium/002088239.jpg?v=1&hei=360&wid=360)\\\\\n\\\\\n$4.38 each\\\\\n\\\\\nH-E-B Organics Whole Milk Yogurt - Vanilla, 32 oz](https://www.heb.com/product-detail/h-e-b-organics-whole-milk-yogurt-vanilla/2088239)\n\n\n\n\n\nAdd to cart\n\n- [![:ratio 25g Protein Strawberry Dairy Snack; Promoted Ad](https://images.heb.com/is/image/HEBGrocery/prd-medium/013015511.jpg?v=1&hei=360&wid=360)\\\\\n\\\\\n$5.97 each\\\\\n\\\\\n:ratio 25g Protein Strawberry Dairy Snack, 5.3 oz\\\\\n\\\\\nPromoted](https://www.heb.com/prod"
+  },
+  {
+    "banner": "Central Market",
+    "domain": "centralmarket.com",
+    "staple": "boneless skinless chicken breast",
+    "unboundScrapeOk": true,
+    "unboundIndicators": [],
+    "leverResults": [],
+    "verdict": "no indicator — unbindable for now (caps at page_verified_unbound at best; no store proof)",
+    "candidateTitle": "Central Market Air Chilled Boneless Skinless Chicken Breast",
+    "candidatePrice": 8.14,
+    "productUrl": "https://www.centralmarket.com/product-category/meat-and-poultry/poultry/chicken/breasts/1246473.1246491.1246492.1246493",
+    "unboundSnippet": "www.centralmarket.com Additional security check is required\n\nwww.centralmarket.com Additional security check is required\n\nhCaptcha\n\n![Check mark](<Base64-Image-Removed>)\n\n'I am human', Select in order to trigger the challenge, or to bypass it if you have an accessibility cookie\n\nI am human\n\n[hCaptcha logo, opens new window with more information](https://www.hcaptcha.com/what-is-hcaptcha-about?ref=www.centralmarket.com&utm_campaign=dd6e16a7-972e-47d2-93d0-96642fb6d8de&utm_medium=checkbox&hl=en)\n\n[Privacy](https://hcaptcha.com/privacy?ref=www.centralmarket.com&utm_campaign=dd6e16a7-972e-47d2-93d0-96642fb6d8de&utm_medium=checkbox&hl=en) \\- [Terms](https://hcaptcha.com/terms?ref=www.centralmarket.com&utm_campaign=dd6e16a7-972e-47d2-93d0-96642fb6d8de&utm_medium=checkbox&hl=en)\n\n![](<Base64-Image-Removed>)\n\nhCaptcha\n\nPlease try again. ⚠️\n\nVerify\n\nAfrikaans\n\nAlbanian\n\nAmharic\n\nArabic\n\nArmenian\n\nAzerbaijani\n\nBasque\n\nBelarusian\n\nBengali\n\nBulgarian\n\nBosnian\n\nBurmese\n\nCatalan\n\nCebuano\n\nChinese\n\nChinese Simplified\n\nChinese Traditional\n\nCorsican\n\nCroatian\n\nCzech\n\nDanish\n\nDutch\n\nEnglish\n\nEsperanto\n\nEstonian\n\nFinnish\n\nFrench\n\nFrisian\n\nGaelic\n\nGalacian\n\nGeorgian\n\nGerman\n\nGreek\n\nGujurati\n\nHaitian\n\n"
+  },
+  {
+    "banner": "Tom Thumb",
+    "domain": "tomthumb.com",
+    "staple": "organic whole milk",
+    "unboundScrapeOk": true,
+    "unboundIndicators": [],
+    "leverResults": [],
+    "verdict": "no indicator — unbindable for now (caps at page_verified_unbound at best; no store proof)",
+    "candidateTitle": "Organic Whole Milk, 128 oz",
+    "candidatePrice": 7.99,
+    "productUrl": "https://www.tomthumb.com/shop/product-details.971252392.html",
+    "unboundSnippet": "## Related Links\n\n[Dairy, Eggs & Cheese](https://www.tomthumb.com/shop/aisles/dairy-eggs-cheese.2574.html) [dha omega milk carton](https://www.tomthumb.com/shop/product-details.136050019.html) [whole milk half](https://www.tomthumb.com/shop/product-details.960158209.html)\n\nSponsored 3rd party ad content\n\nPrevious\n\nNext\n\n![Horizon Milk Whole - GA - Image 1](https://images.albertsons-media.com/is/image/ABS/971252392-C1N1?$ng-ecom-pdp-tn$&defaultImage=Not_Available)\n\n![Horizon Milk Whole - GA - Image 2](https://images.albertsons-media.com/is/image/ABS/971252392-H1N1?$ng-ecom-pdp-tn$&defaultImage=Not_Available)\n\n![Horizon Milk Whole - GA - Image 3](https://images.albertsons-media.com/is/image/ABS/971252392-U1N1?$ng-ecom-pdp-tn$&defaultImage=Not_Available)\n\n![Horizon Milk Whole - GA - Image 4](https://images.albertsons-media.com/is/image/ABS/971252392-L2?$ng-ecom-pdp-tn$&defaultImage=Not_Available)\n\n![Horizon Milk Whole - GA - Image 5](https://images.albertsons-media.com/is/image/ABS/971252392-L4?$ng-ecom-pdp-tn$&defaultImage=Not_Available)\n\n![Horizon Milk Whole - GA](https://images.albertsons-media.com/is/image/ABS/971252392-C1N1?$ng-ecom-pdp-desktop$&defaultImage=Not_Available)\n\nHoriz"
+  },
+  {
+    "banner": "Target",
+    "domain": "target.com",
+    "staple": "organic whole milk",
+    "unboundScrapeOk": true,
+    "unboundIndicators": [],
+    "leverResults": [],
+    "verdict": "no indicator — unbindable for now (caps at page_verified_unbound at best; no store proof)",
+    "candidateTitle": "Good & Gather Organic Whole Milk",
+    "candidatePrice": 4.19,
+    "productUrl": "https://www.target.com/p/organic-whole-milk-1gal-good-38-gather-8482/-/A-93169091",
+    "unboundSnippet": "[skip to main content](https://www.target.com/p/organic-whole-milk-1gal-good-38-gather-8482/-/A-93169091#content) [skip to footer](https://www.target.com/p/organic-whole-milk-1gal-good-38-gather-8482/-/A-93169091#footerHeader)\n\nShip to 23462\n\nPembroke\n\nSponsored\n\n[Skip images](https://www.target.com/p/organic-whole-milk-1gal-good-38-gather-8482/-/A-93169091#info-and-fulfillment)\n\n![White plastic gallon jug of Good & Gather organic whole milk with a label showing a cow in a field and text including \"1 GALLON (3.78 L)\" and \"USDA ORGANIC.\"](https://target.scene7.com/is/image/Target/GUEST_22d5a475-d231-4f95-8379-a48723267add?wid=800&hei=800&qlt=80&fmt=pjpeg)\n\n![Organic Milk - Good & Gather™, 2 of 8, play video](https://target.scene7.com/is/image/Target/GUEST_1bd758e2-2abe-4909-9223-dae10fb640c4?qlt=65&fmt=webp&hei=377&wid=670&fit=crop%2C1)\n\n![A white plastic gallon jug of milk with a red label displaying nutrition facts and ingredients.](https://target.scene7.com/is/image/Target/GUEST_67e9dea8-18c6-4697-b0ce-b6ea085abac2?wid=800&hei=800&qlt=80&fmt=pjpeg)\n\n![A clear glass filled with white colored milk against a white background.](https://target.scene7.com/is/image/Target/GUEST_d00d36d0"
+  },
+  {
+    "banner": "Sprouts",
+    "domain": "shop.sprouts.com",
+    "staple": "organic whole milk",
+    "unboundScrapeOk": true,
+    "unboundIndicators": [
+      {
+        "pattern": "shopping (?:at|in)[:\\s][^!\\n.]{0,80}",
+        "match": "Shopping at Scottsdale - Shea Blvd",
+        "snippet": "vary based on seasonality and other factors. Estimated price is approximate and provided only for reference.\n\n## How would you like to shop?\n\nItem pricing and availability may vary.\n\nDelivery\n\n85260\n\nShopping at Scottsdale - Shea Blvd. (Store #2)\n\nEdit\n\nPickup\n\nScottsdale - Shea Blvd. (Store #2)\n\nChange store\n\nIn-Store · open 7am - 10pm\n\nScottsdale - Shea Blvd. (Store #2)\n\nChange store\n\nAlready have an account?Login now\n\nConfirm"
+      }
+    ],
+    "leverResults": [
+      {
+        "lever": "actions:zip-store-select",
+        "ok": true,
+        "indicators": [
+          {
+            "pattern": "shopping (?:at|in)[:\\s][^!\\n.]{0,80}",
+            "match": "Shopping at Scottsdale - Shea Blvd",
+            "snippet": "easonality and other factors. Estimated price is approximate and provided only for reference.\n\n## How would you like to shop?\n\nItem pricing and availability may vary.\n\nDelivery · 9:35-10:05pm\n\n85260\n\nShopping at Scottsdale - Shea Blvd. (Store #2)\n\nEdit\n\nPickup · available from 9:00am tomorrow\n\nScottsdale - Shea Blvd. (Store #2)\n\nChange store\n\nIn-Store · open 7am - 10pm\n\nScottsdale - Shea Blvd. (Store #2)\n\nChange store\n\nAlready have an account?Login now\n\nConfirm\n\nStripeM-Inner"
+          }
+        ],
+        "changed": false,
+        "note": "shop.sprouts ZIP entry"
+      }
+    ],
+    "verdict": "indicator renders (\"Shopping at Scottsdale - Shea Blvd\"), binding not cracked by tried levers — caps at page_verified_unbound",
+    "candidateTitle": "Straus Family Creamery Organic Whole MilkStraus Family Creamery Organic Whole Milk",
+    "candidatePrice": 7.49,
+    "productUrl": "https://shop.sprouts.com/store/sprouts/products/439553-straus-family-creamery-organic-whole-milk-cream-top-1-0-gal",
+    "unboundSnippet": "[Skip Navigation](https://shop.sprouts.com/store/#store-wrapper)\n\nView Pricing Policy\n\n![](https://d2lnr5mha7bycj.cloudfront.net/product-image/file/large_38e6883b-33d9-4b93-9c03-6d328da02fae.png)\n\nStraus Organic Whole Milk Gallon\n\n$9.491 gal\n\nThis is a carousel with one large image and a track of thumbnails. Select any of the image buttons to change the main image. The large image can be enlarged further using the zoom button by the main image.\n\nItem images, which may include product information when available. When available, product details, ingredients, or nutritional information will be provided in screen reader compatible form below.\n\n![Straus Organic Whole Milk Gallon](https://d2lnr5mha7bycj.cloudfront.net/product-image/file/large_38e6883b-33d9-4b93-9c03-6d328da02fae.png)\n\n★★★★★★★★★★\n\n4.8 (56)\n\n# Straus Organic Whole Milk Gallon\n\nUPC: 00784830000163\n\n1 gal\n\n• $0.07/fl oz\n\nProduct information\n\n- ![](https://www.instacart.com/assets/domains/store_configuration/item_attribute_icon/1216/kzXTnL7TnyDCONjIqB5k_organic.svg)\nOrganic\n- ![](https://www.instacart.com/assets/domains/store_configuration/item_attribute_icon/1216/ZINFSZfWQuG3CBYDovdM_non-gmo.svg)\nNon-GMO\n\nDetails\n\nIngredient"
+  },
+  {
+    "banner": "Aldi",
+    "domain": "aldi.us",
+    "staple": "organic whole milk",
+    "unboundScrapeOk": true,
+    "unboundIndicators": [
+      {
+        "pattern": "shopping (?:at|in)[:\\s][^!\\n.]{0,80}",
+        "match": "Shopping at ALDI - OLA 71 - Hutchinson",
+        "snippet": "sonality and other factors. Estimated price is approximate and provided only for reference.\n\n## How would you like to shop?\n\nItem pricing and availability may vary.\n\nDelivery · Tomorrow, 12pm\n\n67570\n\nShopping at ALDI - OLA 71 - Hutchinson\n\nEdit\n\nPickup · available from 11:00am tomorrow\n\nALDI - OLA 71 - Hutchinson\n\nChange store\n\nIn-Store · open 9am - 8pm\n\nALDI - OLA 71 - Hutchinson\n\nChange store\n\nAlready have an account?Login now\n\nConfirm\n\nStripeM-Inner"
+      }
+    ],
+    "leverResults": [
+      {
+        "lever": "actions:zip-store-select",
+        "ok": true,
+        "indicators": [
+          {
+            "pattern": "shopping (?:at|in)[:\\s][^!\\n.]{0,80}",
+            "match": "Shopping at ALDI - OLA 71 - Hutchinson",
+            "snippet": "sonality and other factors. Estimated price is approximate and provided only for reference.\n\n## How would you like to shop?\n\nItem pricing and availability may vary.\n\nDelivery · Tomorrow, 12pm\n\n67570\n\nShopping at ALDI - OLA 71 - Hutchinson\n\nEdit\n\nPickup · available from 11:00am tomorrow\n\nALDI - OLA 71 - Hutchinson\n\nChange store\n\nIn-Store · open 9am - 8pm\n\nALDI - OLA 71 - Hutchinson\n\nChange store\n\nAlready have an account?Login now\n\nConfirm\n\nStripeM-Inner"
+          }
+        ],
+        "changed": false,
+        "note": "aldi.us delivery ZIP entry"
+      }
+    ],
+    "verdict": "indicator renders (\"Shopping at ALDI - OLA 71 - Hutchinson\"), binding not cracked by tried levers — caps at page_verified_unbound",
+    "candidateTitle": "Organic Whole Milk",
+    "candidatePrice": 4.89,
+    "productUrl": "https://www.aldi.us/store/aldi/products/18649227-friendly-farms-organic-whole-milk-64-fl-oz",
+    "unboundSnippet": "[Skip Navigation](https://www.aldi.us/store/#store-wrapper)\n\nView Pricing Policy\n\n* * *\n\n* * *\n\n![](https://d2lnr5mha7bycj.cloudfront.net/product-image/file/large_76ab2d9d-1b72-448a-9948-eb0d592d5c3c.jpg)\n\nSimply Nature Organic Whole Milk\n\n$4.2564 fl oz\n\nQuantity\n\n- 1\n- 2\n- 3\n- 4\n- 5\n- 6\n- 7\n- 8\n- 9\n\nAdd to cart\n\nThis is a carousel with one large image and a track of thumbnails. Select any of the image buttons to change the main image. The large image can be enlarged further using the zoom button by the main image.\n\nItem images, which may include product information when available. When available, product details, ingredients, or nutritional information will be provided in screen reader compatible form below.\n\n![Simply Nature Organic Whole Milk](https://d2lnr5mha7bycj.cloudfront.net/product-image/file/large_76ab2d9d-1b72-448a-9948-eb0d592d5c3c.jpg)\n\n# Simply Nature Organic Whole Milk\n\n64 fl oz\n\n• $0.07/fl oz\n\n• Organic\n\n• Whole\n\n[64 oz\\\\\nCurrent price: $4.25$4.25](https://www.aldi.us/products/18649227?retailerSlug=aldi)\n\nDetails\n\nIngredients\n\nCurrent price: $4.25$4.25\n\nQuantity\n\n1\n\n- 1\n- 2\n- 3\n- 4\n- 5\n- 6\n- 7\n- 8\n- 9\n- Custom Amount\n\nAdd to cart\n\n## Picked For You\n\nThis is a carous"
+  },
+  {
+    "banner": "Trader Joe's",
+    "domain": "traderjoes.com",
+    "staple": "organic whole milk",
+    "unboundScrapeOk": true,
+    "unboundIndicators": [],
+    "leverResults": [],
+    "verdict": "no indicator — unbindable for now (caps at page_verified_unbound at best; no store proof)",
+    "productUrl": "https://www.traderjoes.com/home/products/pdp/organic-milk-a2a2-080971",
+    "unboundSnippet": "#### We use cookies on our website to improve the customer experience.\n\nBy continuing to enjoy our site, you are agreeing to our use of cookies (the kind that are full of bytes vs the kind you bite). For more information on how we collect and use this information, please review our [Privacy Policy](https://www.traderjoes.com/home/privacy-policy)\n\nGot It"
+  }
+]
