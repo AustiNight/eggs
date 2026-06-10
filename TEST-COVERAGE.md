@@ -275,6 +275,17 @@
 | FirecrawlClient: null on non-2xx page status (metadata.statusCode) | Unit | ✅ | `src/integrations/firecrawl.test.ts` | |
 | FirecrawlClient: null on non-2xx HTTP (res.ok=false, 429 etc) | Unit | ✅ | `src/integrations/firecrawl.test.ts` | |
 | FirecrawlClient: null on fetch throw | Unit | ✅ | `src/integrations/firecrawl.test.ts` | |
+| bannerDomain: known banner → domain mapping (H-E-B, Tom Thumb, Sprouts, Whole Foods) | Unit | ✅ | `src/integrations/store-binding.test.ts` | |
+| bannerDomain: unknown banner → null | Unit | ✅ | `src/integrations/store-binding.test.ts` | |
+| assertStoreBinding: indicator phrase + distinctive city token match (unicode hyphens) | Unit | ✅ | `src/integrations/store-binding.test.ts` | honesty contract |
+| assertStoreBinding: indicator naming a DIFFERENT store → reject | Unit | ✅ | `src/integrations/store-binding.test.ts` | honesty contract |
+| assertStoreBinding: no indicator present at all → reject | Unit | ✅ | `src/integrations/store-binding.test.ts` | honesty contract |
+| assertStoreBinding: retailerStoreId as store-id field in payload → pass | Unit | ✅ | `src/integrations/store-binding.test.ts` | |
+| assertStoreBinding: bare number matching store id in prose → reject | Unit | ✅ | `src/integrations/store-binding.test.ts` | honesty contract |
+| assertStoreBinding: "My Store:" phrasing with city token + '#id' in label | Unit | ✅ | `src/integrations/store-binding.test.ts` | |
+| assertStoreBinding: store with no address — storeName tokens only (pass + fail) | Unit | ✅ | `src/integrations/store-binding.test.ts` | |
+| getBindingRecipe: known banner returns valid recipe kind | Unit | ✅ | `src/integrations/store-binding.test.ts` | |
+| getBindingRecipe: unknown banner defaults to kind 'none' | Unit | ✅ | `src/integrations/store-binding.test.ts` | registry ships empty |
 
 Section grows as WS1 tasks land (store-binding, price-discovery, plan wiring, UI).
 
