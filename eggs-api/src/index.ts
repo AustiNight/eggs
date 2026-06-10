@@ -11,6 +11,7 @@ import plan from './routes/plan.js'
 import products from './routes/products.js'
 import foodfacts from './routes/foodfacts.js'
 import plans from './routes/plans.js'
+import billing from './routes/billing.js'
 
 const app = new Hono<HonoEnv>()
 
@@ -50,6 +51,7 @@ app.route('/api/price-plan', plan)
 app.route('/api/products', products)
 app.route('/api/food', foodfacts)
 app.route('/api/plans', plans)
+app.route('/api/billing', billing)
 
 // Global error handler — catch unhandled exceptions, malformed JSON, etc.
 app.onError((err, c) => {
