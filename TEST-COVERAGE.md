@@ -1,6 +1,6 @@
 # E.G.G.S. Test Coverage Matrix
 
-**Last updated:** 2026-04-22  
+**Last updated:** 2026-06-09  
 **Rule:** Every new feature or change that may impact automated testing must update this file — even if the automation isn't written yet. The matrix is the source of truth for what tests *should* exist.
 
 ---
@@ -268,8 +268,15 @@
 | TavilyClient: include_domains omission | Unit | ✅ | `src/integrations/tavily.test.ts` | |
 | TavilyClient: error degrade | Unit | ✅ | `src/integrations/tavily.test.ts` | |
 | TavilyClient: url-less filtering | Unit | ✅ | `src/integrations/tavily.test.ts` | |
+| FirecrawlClient: success mapping (markdown + statusCode + sourceUrl) | Unit | ✅ | `src/integrations/firecrawl.test.ts` | |
+| FirecrawlClient: wire format (proxy auto/formats/timeout default 9000) | Unit | ✅ | `src/integrations/firecrawl.test.ts` | |
+| FirecrawlClient: passes headers + actions through to API | Unit | ✅ | `src/integrations/firecrawl.test.ts` | |
+| FirecrawlClient: null on API error (success=false) | Unit | ✅ | `src/integrations/firecrawl.test.ts` | |
+| FirecrawlClient: null on non-2xx page status (metadata.statusCode) | Unit | ✅ | `src/integrations/firecrawl.test.ts` | |
+| FirecrawlClient: null on non-2xx HTTP (res.ok=false, 429 etc) | Unit | ✅ | `src/integrations/firecrawl.test.ts` | |
+| FirecrawlClient: null on fetch throw | Unit | ✅ | `src/integrations/firecrawl.test.ts` | |
 
-Section grows as WS1 tasks land (firecrawl, store-binding, price-discovery, plan wiring, UI).
+Section grows as WS1 tasks land (store-binding, price-discovery, plan wiring, UI).
 
 ---
 
