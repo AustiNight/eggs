@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { verifyProductContent } from './content-verifier'
+import { verifyProductContent, verifyContentText } from './content-verifier'
+import type { StoreIdentity } from '../types/index.js'
 
 describe('verifyProductContent', () => {
   beforeEach(() => { vi.restoreAllMocks() })
@@ -63,5 +64,44 @@ describe('verifyProductContent', () => {
     const result = await verifyProductContent('https://slow.example', 'x', 1, { timeoutMs: 50 })
     expect(result.verified).toBe(false)
     expect(result.reason).toMatch(/timeout|abort/i)
+  })
+})
+
+const STORE: StoreIdentity = {
+  banner: 'H-E-B', bannerNormalized: 'h-e-b', storeName: 'H-E-B Plano',
+  storeAddress: '6001 Central Expy, Plano, TX 75023',
+}
+
+describe('verifyContentText', () => {
+  const page = "You're shopping Plano H-E-B! Organic Chunk Chicken Breast 10 oz $4.98 each"
+
+  it('verifies name+price on pre-fetched text without network', () => {
+    const r = verifyContentText(page, 'Organic Chunk Chicken Breast', 4.98)
+    expect(r.verified).toBe(true)
+    expect(r.storeBound).toBe(false) // no expectedStore passed
+  })
+
+  it('sets storeBound true when binding assertion passes', () => {
+    const r = verifyContentText(page, 'Organic Chunk Chicken Breast', 4.98, { expectedStore: STORE })
+    expect(r.verified).toBe(true)
+    expect(r.storeBound).toBe(true)
+  })
+
+  it('verified can be true while storeBound is false (wrong store)', () => {
+    const wrong = "You're shopping Victoria H-E-B plus! Organic Chunk Chicken Breast 10 oz $4.98 each"
+    const r = verifyContentText(wrong, 'Organic Chunk Chicken Breast', 4.98, { expectedStore: STORE })
+    expect(r.verified).toBe(true)
+    expect(r.storeBound).toBe(false)
+  })
+
+  it('strips markdown link noise before matching', () => {
+    const md = "[Skip](https://x.com)\n# Organic Chunk Chicken Breast\n\n$4.98 each($0.50 / oz)"
+    expect(verifyContentText(md, 'Organic Chunk Chicken Breast', 4.98).verified).toBe(true)
+  })
+
+  it('fails with reason price_not_found when exact price missing', () => {
+    const r = verifyContentText('Organic Chunk Chicken Breast $7.49', 'Organic Chunk Chicken Breast', 4.98)
+    expect(r.verified).toBe(false)
+    expect(r.reason).toBe('price_not_found')
   })
 })

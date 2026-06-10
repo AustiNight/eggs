@@ -1,5 +1,10 @@
+import type { StoreIdentity } from '../types/index.js'
+import { assertStoreBinding } from '../integrations/store-binding.js'
+
 export interface VerifyResult {
   verified: boolean
+  /** true only when expectedStore was provided AND the binding assertion passed */
+  storeBound: boolean
   reason?: string
 }
 
@@ -8,11 +13,20 @@ export interface VerifyOptions {
   minNameCoverage?: number
 }
 
+export interface VerifyTextOptions {
+  minNameCoverage?: number
+  expectedStore?: StoreIdentity
+}
+
 const STOP_WORDS = new Set(['the', 'and', 'for', 'with', 'of', 'a', 'an', 'or'])
 
-function extractTextFromHtml(html: string): string {
-  const noScripts = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
-  return noScripts.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase()
+function extractText(content: string): string {
+  const noScripts = content.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
+  return noScripts
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // markdown links → label text
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
 }
 
 function priceAppears(text: string, price: number): boolean {
@@ -34,6 +48,26 @@ function nameCoverage(text: string, name: string): number {
   return hits / tokens.length
 }
 
+/** Pure verification against pre-fetched page content (HTML or markdown). */
+export function verifyContentText(
+  content: string,
+  productName: string,
+  price: number,
+  opts: VerifyTextOptions = {},
+): VerifyResult {
+  const minCoverage = opts.minNameCoverage ?? 0.6
+  const text = extractText(content)
+
+  const coverage = nameCoverage(text, productName)
+  if (coverage < minCoverage) return { verified: false, storeBound: false, reason: `name_coverage_${coverage.toFixed(2)}` }
+  if (!priceAppears(text, price)) return { verified: false, storeBound: false, reason: 'price_not_found' }
+
+  // assertStoreBinding gets the RAW content — it does its own normalization and
+  // needs the raw markup for store-id attribute matching.
+  const storeBound = opts.expectedStore ? assertStoreBinding(content, opts.expectedStore) : false
+  return { verified: true, storeBound }
+}
+
 export async function verifyProductContent(
   url: string,
   productName: string,
@@ -41,7 +75,6 @@ export async function verifyProductContent(
   opts: VerifyOptions = {},
 ): Promise<VerifyResult> {
   const timeoutMs = opts.timeoutMs ?? 6000
-  const minCoverage = opts.minNameCoverage ?? 0.6
 
   const controller = new AbortController()
   const t = setTimeout(() => controller.abort(), timeoutMs)
@@ -50,19 +83,12 @@ export async function verifyProductContent(
       signal: controller.signal,
       headers: { 'user-agent': 'Mozilla/5.0 (compatible; EggsBot/1.0)' },
     })
-    if (!res.ok) return { verified: false, reason: `http_${res.status}` }
+    if (!res.ok) return { verified: false, storeBound: false, reason: `http_${res.status}` }
     const html = await res.text()
-    const text = extractTextFromHtml(html)
-
-    const coverage = nameCoverage(text, productName)
-    if (coverage < minCoverage) return { verified: false, reason: `name_coverage_${coverage.toFixed(2)}` }
-
-    if (!priceAppears(text, price)) return { verified: false, reason: 'price_not_found' }
-
-    return { verified: true }
+    return verifyContentText(html, productName, price, { minNameCoverage: opts.minNameCoverage })
   } catch (err: any) {
-    if (err?.name === 'AbortError') return { verified: false, reason: 'timeout' }
-    return { verified: false, reason: `fetch_error_${err?.message ?? 'unknown'}` }
+    if (err?.name === 'AbortError') return { verified: false, storeBound: false, reason: 'timeout' }
+    return { verified: false, storeBound: false, reason: `fetch_error_${err?.message ?? 'unknown'}` }
   } finally {
     clearTimeout(t)
   }

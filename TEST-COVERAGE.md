@@ -290,6 +290,11 @@
 | assertStoreBinding: single address-token overlap insufficient (name token or >=2 address tokens) | Unit | ✅ | `src/integrations/store-binding.test.ts` | honesty contract — adversarial A4 |
 | getBindingRecipe: known banner returns valid recipe kind | Unit | ✅ | `src/integrations/store-binding.test.ts` | |
 | getBindingRecipe: unknown banner defaults to kind 'none' | Unit | ✅ | `src/integrations/store-binding.test.ts` | registry ships empty |
+| verifyContentText: pure name+price verify on pre-fetched text, no network | Unit | ✅ | `src/lib/content-verifier.test.ts` | storeBound false when no expectedStore |
+| verifyContentText: storeBound true when expectedStore binding assertion passes | Unit | ✅ | `src/lib/content-verifier.test.ts` | honesty contract |
+| verifyContentText: verified true but storeBound false on wrong-store indicator | Unit | ✅ | `src/lib/content-verifier.test.ts` | honesty contract — price can verify, binding still rejected |
+| verifyContentText: markdown link noise stripped before matching | Unit | ✅ | `src/lib/content-verifier.test.ts` | Firecrawl markdown input (Task 8 orchestrator) |
+| verifyContentText: reason 'price_not_found' when exact price missing | Unit | ✅ | `src/lib/content-verifier.test.ts` | |
 
 Section grows as WS1 tasks land (store-binding, price-discovery, plan wiring, UI).
 
