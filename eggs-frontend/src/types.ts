@@ -39,6 +39,15 @@ export interface PlanDiagnostics {
     broaderTermsAttempted: number
     broaderTermsSucceeded: number
   }
+  discovery?: {
+    serperQueries: number
+    tavilyQueries: number
+    firecrawlScrapes: number
+    storeBound: number
+    unbound: number
+    indexOnly: number
+    fallbackLlm: number
+  }
 }
 
 export interface Candidate {
@@ -177,6 +186,12 @@ export interface StoreItem {
    * UI surfaces (M9) will use this for price-per-unit display.
    */
   pricedSize?: { quantity: number; unit: string } | null
+  /** WS1 honesty contract. Absent on legacy plans — UI falls back to `confidence`. */
+  provenance?: 'api' | 'store_page_verified' | 'page_verified_unbound' | 'shopping_index' | 'model_estimate'
+  /** Epoch ms when the price was last verified/fetched (also set from cache writes). */
+  verifiedAt?: number
+  /** retailerStoreId the binding assertion confirmed, when provenance==='store_page_verified'. */
+  verifiedStoreId?: string
 }
 
 export interface ShoppingPlanRecord {

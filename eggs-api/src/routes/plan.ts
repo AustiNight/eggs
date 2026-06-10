@@ -673,6 +673,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
       broaderTermsAttempted: totalFallbackUsed,
       broaderTermsSucceeded: totalFallbackSucceeded,
     },
+    discovery: { serperQueries: 0, tavilyQueries: 0, firecrawlScrapes: 0, storeBound: 0, unbound: 0, indexOnly: 0, fallbackLlm: 0 },
   }
 
   console.log('[plan] results → kroger items:', krogerResult ? Object.keys(krogerResult.items).length : 'null',

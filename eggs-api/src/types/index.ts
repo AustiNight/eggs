@@ -59,6 +59,12 @@ export interface Env {
    * When absent the "Shop this list on Instacart" button is silently skipped.
    */
   INSTACART_IDP_API_KEY?: string
+  /** Serper.dev API key — Google Shopping/Places verticals. Absent → discovery pipeline skipped. */
+  SERPER_API_KEY?: string
+  /** Tavily API key — product-URL resolution. Absent → resolution leg skipped. */
+  TAVILY_API_KEY?: string
+  /** Firecrawl API key — bot-walled fetch fallback. Absent → direct fetch only. */
+  FIRECRAWL_API_KEY?: string
 }
 
 // ─── PlanDiagnostics — backend counters surfaced on ShoppingPlan.meta (P3.1) ──
@@ -101,6 +107,19 @@ export interface PlanDiagnostics {
     broaderTermsAttempted: number
     /** sum of ontologyFallbackSucceeded across Kroger + Walmart */
     broaderTermsSucceeded: number
+  }
+  discovery: {
+    serperQueries: number
+    tavilyQueries: number
+    firecrawlScrapes: number
+    /** items that reached provenance 'store_page_verified' */
+    storeBound: number
+    /** items that reached 'page_verified_unbound' */
+    unbound: number
+    /** items that reached 'shopping_index' */
+    indexOnly: number
+    /** items where discovery found nothing and the LLM result stood */
+    fallbackLlm: number
   }
 }
 
@@ -254,6 +273,38 @@ export interface ClarifiedAttributes {
 export type PriceSource = 'kroger_api' | 'walmart_api' | 'ai_estimated'
 export type Confidence = 'real' | 'estimated_with_source' | 'estimated'
 
+// ─── Store-scoped price discovery (WS1) ──────────────────────────────────────
+
+/** A concrete store from distance-bound discovery — never just a banner. */
+export interface StoreIdentity {
+  banner: string
+  /** normalizeBanner(banner) — cache keys, binding/domain registry lookups */
+  bannerNormalized: string
+  storeName: string
+  storeAddress?: string
+  distanceMiles?: number
+  /** Retailer-internal store id, when a locator adapter resolved it. */
+  retailerStoreId?: string
+}
+
+/**
+ * Price provenance — the honesty contract (spec WS1).
+ * 'api'                  — Kroger/Walmart API result.
+ * 'store_page_verified'  — exact price verified on a product page fetched BOUND
+ *                          to the chef's discovered store (binding assertion passed).
+ * 'page_verified_unbound'— exact price verified on a product page, but the fetch
+ *                          could not be store-bound. Display as "online price".
+ * 'shopping_index'       — price from Serper Shopping index only; page verification
+ *                          unavailable/failed. Display as "online price".
+ * 'model_estimate'       — LLM guess, no source. Display de-emphasized.
+ */
+export type Provenance =
+  | 'api'
+  | 'store_page_verified'
+  | 'page_verified_unbound'
+  | 'shopping_index'
+  | 'model_estimate'
+
 export interface StoreItem {
   ingredientId: string
   name: string
@@ -296,6 +347,12 @@ export interface StoreItem {
    * selectWinner (P2.8). Absent on legacy plans and items the grader skipped.
    */
   alignmentGrade?: AlignmentGrade
+  /** WS1 honesty contract. Absent on legacy plans — UI falls back to `confidence`. */
+  provenance?: Provenance
+  /** Epoch ms when the price was last verified/fetched (also set from cache writes). */
+  verifiedAt?: number
+  /** retailerStoreId the binding assertion confirmed, when provenance==='store_page_verified'. */
+  verifiedStoreId?: string
 }
 
 export interface StorePlan {

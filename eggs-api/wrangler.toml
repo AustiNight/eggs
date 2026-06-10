@@ -42,7 +42,8 @@ SHOPPING_V2 = "true"
 # KROGER_CLIENT_ID, KROGER_CLIENT_SECRET,
 # WALMART_CONSUMER_ID, WALMART_KEY_VERSION, WALMART_PRIVATE_KEY, WALMART_PUBLISHER_ID,
 # (optional) WALMART_BASE_URL — only set if Walmart hands you a non-default URL,
-# TAPESTRY_SERVICE_KEY, STRIPE_WEBHOOK_SECRET
+# TAPESTRY_SERVICE_KEY, STRIPE_WEBHOOK_SECRET,
+# SERPER_API_KEY, TAVILY_API_KEY, FIRECRAWL_API_KEY
 
 # ── Staging (deploy with: `wrangler deploy --env staging`) ──
 # IMPORTANT: Cloudflare does NOT inherit top-level kv_namespaces / vars into env blocks.
