@@ -57,27 +57,35 @@ export function getBindingRecipe(bannerNormalized: string): BindingRecipe {
   return RECIPES[bannerNormalized] ?? { kind: 'none' }
 }
 
-/** Lowercase + fold unicode hyphens/dashes (U+2010..U+2015, U+2212) to ASCII '-'. */
+/**
+ * Lowercase + fold unicode hyphens/dashes (U+2010..U+2015, U+2212) to ASCII '-'
+ * and typographic apostrophes (U+2018, U+2019) to ASCII "'". Without the
+ * apostrophe fold, a curly-quoted "You’re shopping …" indicator would be
+ * invisible to INDICATOR_RE and its wrong-store veto would never fire.
+ */
 function normalizeText(s: string): string {
-  return s.toLowerCase().replace(/[‐-―−]/g, '-')
+  return s.toLowerCase().replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'")
 }
 
 /** Generic words that never distinguish one location of a banner from another. */
 const GENERIC_STOP_TOKENS = new Set(['the', 'and', 'store', 'market', 'plus', 'h-e-b', 'heb'])
 
-/**
- * Tokens that identify WHICH store this is — from storeName + storeAddress,
- * minus banner words, generic words, pure digits, short tokens, state codes.
- */
-function distinctiveTokens(store: StoreIdentity): string[] {
+/** Stop tokens for a store: generic words + the banner's own words (part of every location's name). */
+function bannerStopTokens(store: StoreIdentity): Set<string> {
   const stop = new Set(GENERIC_STOP_TOKENS)
-  // Banner's own words are part of every location's name — not distinctive.
-  for (const w of normalizeText(store.banner).split(/[\s,]+/)) {
+  for (const w of normalizeText(store.banner).split(/[^a-z0-9-]+/)) {
     if (w) stop.add(w)
   }
-  const source = `${store.storeName} ${store.storeAddress ?? ''}`
+  return stop
+}
+
+/**
+ * Tokens that identify WHICH store this is — drawn from one source string,
+ * minus banner words, generic words, pure digits, short tokens, state codes.
+ */
+function distinctiveTokens(source: string, stop: Set<string>): string[] {
   return normalizeText(source)
-    .split(/[\s,]+/)
+    .split(/[^a-z0-9]+/)       // word-bounded: same tokenization as the label
     .filter(t =>
       t.length > 2 &&          // also excludes 2-letter state codes
       !stop.has(t) &&
@@ -97,21 +105,33 @@ function storeIdInPayload(text: string, retailerStoreId: string): boolean {
 /**
  * The honesty guarantee: does this rendered page text prove it is bound to the
  * expected store? Two signals:
- *  1. A store-indicator phrase whose label shares a distinctive token with the
- *     expected store. An indicator naming a DIFFERENT store is a hard fail —
- *     positive evidence the binding went elsewhere.
+ *  1. A store-indicator phrase whose label word-matches the expected store.
+ *     Label tokens are word-bounded (split on non-alphanumeric, exact token
+ *     equality) — substring matching would let "McAllen" satisfy store "Allen".
+ *     Two distinctive-token groups are kept separate:
+ *       - NAME tokens (storeName minus banner/stop words): any single match
+ *         proves the binding — retailers name locations distinctively.
+ *       - ADDRESS tokens (storeAddress, same filters): >=2 matches required.
+ *         A lone address token is weak evidence — street-suffix tokens like
+ *         'central' collide with other cities' store names (Dallas Central).
+ *     An indicator naming a DIFFERENT store is a hard fail — positive evidence
+ *     the binding went elsewhere.
  *  2. The retailerStoreId appearing as a store-id field in the page payload.
  */
 export function assertStoreBinding(pageText: string, store: StoreIdentity): boolean {
   const text = normalizeText(pageText)
-  const tokens = distinctiveTokens(store)
+  const stop = bannerStopTokens(store)
+  const nameTokens = distinctiveTokens(store.storeName, stop)
+  const addressTokens = distinctiveTokens(store.storeAddress ?? '', stop)
 
   const indicator = INDICATOR_RE.exec(text)
   if (indicator) {
-    const label = indicator[1].trim()
-    // Indicator present: it decides. A label sharing no distinctive token
+    // Indicator present: it decides. A label matching neither evidence rule
     // names a different store — never fall through to weaker signals.
-    return tokens.some(t => label.includes(t))
+    const labelTokens = new Set(indicator[1].split(/[^a-z0-9]+/).filter(Boolean))
+    const nameMatch = nameTokens.some(t => labelTokens.has(t))
+    const addressMatches = addressTokens.filter(t => labelTokens.has(t)).length
+    return nameMatch || addressMatches >= 2
   }
 
   if (store.retailerStoreId && storeIdInPayload(text, store.retailerStoreId)) {

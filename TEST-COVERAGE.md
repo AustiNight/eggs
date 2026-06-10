@@ -284,6 +284,10 @@
 | assertStoreBinding: bare number matching store id in prose → reject | Unit | ✅ | `src/integrations/store-binding.test.ts` | honesty contract |
 | assertStoreBinding: "My Store:" phrasing with city token + '#id' in label | Unit | ✅ | `src/integrations/store-binding.test.ts` | |
 | assertStoreBinding: store with no address — storeName tokens only (pass + fail) | Unit | ✅ | `src/integrations/store-binding.test.ts` | |
+| assertStoreBinding: curly-apostrophe (U+2019) indicator vetoes wrong store even with store-id field present | Unit | ✅ | `src/integrations/store-binding.test.ts` | honesty contract — adversarial A2 |
+| assertStoreBinding: curly-apostrophe indicator matches the right store | Unit | ✅ | `src/integrations/store-binding.test.ts` | adversarial A2b |
+| assertStoreBinding: word-bounded token match — "McAllen" must not match store "Allen" | Unit | ✅ | `src/integrations/store-binding.test.ts` | honesty contract — adversarial A3 |
+| assertStoreBinding: single address-token overlap insufficient (name token or >=2 address tokens) | Unit | ✅ | `src/integrations/store-binding.test.ts` | honesty contract — adversarial A4 |
 | getBindingRecipe: known banner returns valid recipe kind | Unit | ✅ | `src/integrations/store-binding.test.ts` | |
 | getBindingRecipe: unknown banner defaults to kind 'none' | Unit | ✅ | `src/integrations/store-binding.test.ts` | registry ships empty |
 
