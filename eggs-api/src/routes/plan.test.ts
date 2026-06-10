@@ -70,6 +70,8 @@ const BASE_ENV = {
   WALMART_PRIVATE_KEY: '',
   WALMART_PUBLISHER_ID: '',
   STRIPE_WEBHOOK_SECRET: '',
+  STRIPE_SECRET_KEY: '',
+  STRIPE_PRO_PRICE_ID: '',
   RATE_LIMIT_KV: {
     get: vi.fn().mockResolvedValue(null),
     put: vi.fn().mockResolvedValue(undefined),

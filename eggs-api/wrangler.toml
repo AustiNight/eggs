@@ -36,13 +36,16 @@ id = "20c95052636d417f96f31294cdadd08b"
 [vars]
 FREE_MONTHLY_LIMIT = "3"
 SHOPPING_V2 = "true"
+# STRIPE_PRO_PRICE_ID set per-env in [vars] (a price id isn't sensitive);
+# STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET via `wrangler secret put`. Real
+# value unset here — set at deploy time once the Stripe Product/Price exists.
 
 # Prod secrets — set via: wrangler secret put <NAME>
 # ANTHROPIC_API_KEY, CLERK_SECRET_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY,
 # KROGER_CLIENT_ID, KROGER_CLIENT_SECRET,
 # WALMART_CONSUMER_ID, WALMART_KEY_VERSION, WALMART_PRIVATE_KEY, WALMART_PUBLISHER_ID,
 # (optional) WALMART_BASE_URL — only set if Walmart hands you a non-default URL,
-# TAPESTRY_SERVICE_KEY, STRIPE_WEBHOOK_SECRET,
+# TAPESTRY_SERVICE_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_SECRET_KEY,
 # SERPER_API_KEY, TAVILY_API_KEY, FIRECRAWL_API_KEY
 
 # ── Staging (deploy with: `wrangler deploy --env staging`) ──
@@ -74,6 +77,7 @@ id = "REPLACE_ME_SPEC_CACHE_STAGING_ID"
 
 [env.staging.vars]
 FREE_MONTHLY_LIMIT = "100"
+# STRIPE_PRO_PRICE_ID = "price_…"  # test-mode price id — set at staging deploy
 
 # Staging secrets — set with --env staging:
 #   wrangler secret put WALMART_CONSUMER_ID --env staging   (etc.)

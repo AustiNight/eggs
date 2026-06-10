@@ -32,7 +32,9 @@ const BASE_ENV = {
   WALMART_PRIVATE_KEY: '',
   WALMART_PUBLISHER_ID: '',
   TAPESTRY_SERVICE_KEY: '',
-  STRIPE_WEBHOOK_SECRET: ''
+  STRIPE_WEBHOOK_SECRET: '',
+  STRIPE_SECRET_KEY: '',
+  STRIPE_PRO_PRICE_ID: ''
 }
 
 function mockDb(tier: 'free' | 'pro', plansCount: number, eventsCount: number) {

@@ -47,6 +47,10 @@ export interface Env {
   WALMART_BASE_URL?: string
   TAPESTRY_SERVICE_KEY: string
   STRIPE_WEBHOOK_SECRET: string
+  /** Stripe secret key — sk_test_… in dev, sk_live_… in prod. */
+  STRIPE_SECRET_KEY: string
+  /** Stripe Price id for the Pro subscription (price_…). Test-mode price in dev. */
+  STRIPE_PRO_PRICE_ID: string
   /**
    * Feature flag for the shopping-plan v2 best-value path.
    * Set to 'true' to enable M8+ totals correction and best-basket selection.

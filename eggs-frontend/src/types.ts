@@ -99,6 +99,8 @@ export interface UserProfile {
   ai_provider: string | null
   subscription_tier: 'free' | 'pro'
   subscription_status: string
+  subscription_period_end?: string | null
+  stripe_customer_id?: string | null
 }
 
 export interface EggsEvent {
