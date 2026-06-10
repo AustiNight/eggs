@@ -31,7 +31,7 @@ describe('verifyProductContent', () => {
     }))
     const result = await verifyProductContent('https://ex.com/p', 'Chicken Thighs', 4.99)
     expect(result.verified).toBe(false)
-    expect(result.reason).toMatch(/name|product/i)
+    expect(result.reason).toMatch(/^name_coverage_/)
   })
 
   it('returns verified:false when HTTP status is not ok', async () => {

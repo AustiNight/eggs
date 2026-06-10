@@ -50,24 +50,25 @@ function nameCoverage(text: string, name: string): number {
 
 /** Pure verification against pre-fetched page content (HTML or markdown). */
 export function verifyContentText(
-  content: string,
+  rawContent: string,
   productName: string,
   price: number,
   opts: VerifyTextOptions = {},
 ): VerifyResult {
   const minCoverage = opts.minNameCoverage ?? 0.6
-  const text = extractText(content)
+  const normalizedText = extractText(rawContent)
 
-  const coverage = nameCoverage(text, productName)
+  const coverage = nameCoverage(normalizedText, productName)
   if (coverage < minCoverage) return { verified: false, storeBound: false, reason: `name_coverage_${coverage.toFixed(2)}` }
-  if (!priceAppears(text, price)) return { verified: false, storeBound: false, reason: 'price_not_found' }
+  if (!priceAppears(normalizedText, price)) return { verified: false, storeBound: false, reason: 'price_not_found' }
 
   // assertStoreBinding gets the RAW content — it does its own normalization and
   // needs the raw markup for store-id attribute matching.
-  const storeBound = opts.expectedStore ? assertStoreBinding(content, opts.expectedStore) : false
+  const storeBound = opts.expectedStore ? assertStoreBinding(rawContent, opts.expectedStore) : false
   return { verified: true, storeBound }
 }
 
+// NOTE: the network wrapper never passes expectedStore — store-bound verification requires the orchestrator's bound fetch (lib/price-discovery, Task 8/9). storeBound from this wrapper is always false by design.
 export async function verifyProductContent(
   url: string,
   productName: string,
