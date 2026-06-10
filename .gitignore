@@ -30,6 +30,7 @@ setup-prod-secrets.sh
 .env.seed.local
 .env.test.local
 .env.*.local
+.dev.vars
 
 # Playwright auth state
 playwright/.clerk/
