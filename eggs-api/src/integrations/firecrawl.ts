@@ -7,10 +7,15 @@ export type FirecrawlAction =
   | { type: 'write'; text: string }
   | { type: 'press'; key: string }
   | { type: 'executeJavascript'; script: string }
+  | { type: 'scroll'; direction?: 'up' | 'down'; selector?: string }
+  | { type: 'screenshot'; fullPage?: boolean }
+  | { type: 'scrape' }
+  // pdf action omitted — not needed for binding recipes
 
 export interface ScrapeOptions {
   headers?: Record<string, string>
   actions?: FirecrawlAction[]
+  /** Firecrawl API timeout in milliseconds (1000–300000). Default 9000 to fit the per-item plan ceiling. */
   timeoutMs?: number
 }
 
@@ -54,7 +59,10 @@ export class FirecrawlClient {
       }
       if (!data.success || !data.data?.markdown) return null
       const statusCode = data.data.metadata?.statusCode ?? 0
-      if (statusCode < 200 || statusCode >= 300) return null
+      if (statusCode < 200 || statusCode >= 300) {
+        console.warn('[firecrawl] scrape non-2xx page status', statusCode, url)
+        return null
+      }
       return {
         markdown: data.data.markdown,
         statusCode,

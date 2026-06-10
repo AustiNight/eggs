@@ -51,8 +51,16 @@ describe('FirecrawlClient.scrape', () => {
     expect(await new FirecrawlClient('k', mockFetch({ success: false }, true)).scrape('https://x.com')).toBeNull()
     const errPage = { success: true, data: { markdown: 'Page Not Found', metadata: { statusCode: 404, sourceURL: 'https://x.com' } } }
     expect(await new FirecrawlClient('k', mockFetch(errPage)).scrape('https://x.com')).toBeNull()
+    expect(await new FirecrawlClient('k', mockFetch({ success: true, data: { markdown: 'text' } })).scrape('https://x.com')).toBeNull()
     expect(await new FirecrawlClient('k', mockFetch({}, false, 429)).scrape('https://x.com')).toBeNull()
     const boom = vi.fn().mockRejectedValue(new Error('net')) as unknown as typeof fetch
     expect(await new FirecrawlClient('k', boom).scrape('https://x.com')).toBeNull()
+  })
+
+  it('respects timeoutMs override', async () => {
+    const f = mockFetch(SCRAPE_RESPONSE)
+    await new FirecrawlClient('fc-x', f).scrape('https://x.com/p', { timeoutMs: 15000 })
+    const body = JSON.parse((f as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string)
+    expect(body.timeout).toBe(15000)
   })
 })
