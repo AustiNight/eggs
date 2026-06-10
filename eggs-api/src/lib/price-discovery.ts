@@ -35,6 +35,7 @@ export async function discoverPrice(
   locationLabel: string | undefined,
   deps: DiscoveryDeps,
 ): Promise<DiscoveredPrice | null> {
+  try {
   if (!deps.serper) return null
 
   // 1. DISCOVER — index prices are candidates only, never store-trusted.
@@ -106,6 +107,10 @@ export async function discoverPrice(
     provenance: 'page_verified_unbound',
     verifiedAt: Date.now(),
   }
+  } catch (err) {
+    console.warn('[price-discovery] threw', err instanceof Error ? err.message : err)
+    return null
+  }
 }
 
 function indexOnly(candidate: ShoppingCandidate): DiscoveredPrice {
@@ -118,7 +123,8 @@ function indexOnly(candidate: ShoppingCandidate): DiscoveredPrice {
   }
 }
 
-/** Heuristic: product-detail URLs over category/search pages. */
-function looksLikeProductPage(url: string): boolean {
-  return /product|\/p\/|\/ip\/|item|pd\//i.test(url) && !/search|category|\/s\?|\/c\//i.test(url)
+/** Heuristic: product-detail URLs over category/search/listing pages. */
+export function looksLikeProductPage(url: string): boolean {
+  return /product|\/p\/|\/ip\/|item|pd\//i.test(url) &&
+    !/search|category|collections?|storefront|\/s\?|\/c\//i.test(url)
 }

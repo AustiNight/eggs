@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { discoverPrice } from './price-discovery'
+import { discoverPrice, looksLikeProductPage } from './price-discovery'
 import type { StoreIdentity } from '../types/index.js'
 
 const STORE: StoreIdentity = {
@@ -116,5 +116,29 @@ describe('discoverPrice', () => {
     const out = await discoverPrice('chicken breast', STORE, 'Dallas', d)
     expect(out?.provenance).toBe('store_page_verified')
     expect(directFetch).toHaveBeenCalledWith(PRODUCT_URL, { Cookie: 'CURR_STORE=790' })
+  })
+
+  it('returns null (never throws) when directFetch throws', async () => {
+    const d = deps({ directFetch: vi.fn().mockRejectedValue(new Error('boom')), firecrawl: undefined })
+    await expect(discoverPrice('chicken breast', STORE, 'Dallas', d)).resolves.toBeNull()
+  })
+})
+
+describe('looksLikeProductPage', () => {
+  it.each([
+    ['https://www.heb.com/product-detail/x/1748922', true],
+    ['https://www.target.com/p/good-gather-chicken/-/A-13473044', true],
+    ['https://www.walmart.com/ip/Tyson-Chicken/12345', true],
+    ['https://shop.sprouts.com/product/53842', true],
+  ])('accepts product URL %s', (url, expected) => {
+    expect(looksLikeProductPage(url as string)).toBe(expected as boolean)
+  })
+  it.each([
+    ['https://www.heb.com/category/chicken/490110', false],
+    ['https://www.target.com/c/chicken/-/N-xyz', false],
+    ['https://shop.sprouts.com/collections/chicken', false],
+    ['https://www.heb.com/search?q=chicken', false],
+  ])('rejects non-product URL %s', (url, expected) => {
+    expect(looksLikeProductPage(url as string)).toBe(expected as boolean)
   })
 })

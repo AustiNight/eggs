@@ -307,6 +307,9 @@
 | discoverPrice: null when Serper dep absent (no key) | Unit | ✅ | `src/lib/price-discovery.test.ts` | graceful degradation |
 | discoverPrice: prefers product-detail URL over category/search from Tavily | Unit | ✅ | `src/lib/price-discovery.test.ts` | |
 | discoverPrice: applies cookie binding recipe headers to direct fetch | Unit | ✅ | `src/lib/price-discovery.test.ts` | store-scoping |
+| discoverPrice: returns null (never throws) when directFetch throws | Unit | ✅ | `src/lib/price-discovery.test.ts` | top-level safety — caller-supplied dep not contractually non-throwing; safe-outcome = null |
+| looksLikeProductPage: accepts real product URLs (H-E-B, Target /p/, Walmart /ip/, Sprouts /product/) | Unit | ✅ | `src/lib/price-discovery.test.ts` | per-domain coverage — exported heuristic |
+| looksLikeProductPage: rejects category/collections/storefront/search URLs (H-E-B, Target /c/, Sprouts /collections/) | Unit | ✅ | `src/lib/price-discovery.test.ts` | per-domain coverage — hardened reject pattern (collections, storefront) |
 
 Section grows as WS1 tasks land (plan wiring, UI).
 
