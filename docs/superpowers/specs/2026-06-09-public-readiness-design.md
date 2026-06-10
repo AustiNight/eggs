@@ -133,12 +133,23 @@ the expected StoreIdentity. Each integration degrades gracefully when its key/en
   defend to a client is explicit. Only store-bound (`verified`) prices enter the verified
   subtotal.
 
-### Cost guardrails
+### Rate limits & cost guardrails
 
 Per plan run (20 items × ~3 AI banners): Serper ~60 queries ≈ $0.06; Tavily ~30–60 credits;
 Firecrawl only on direct-fetch failure (observed: basic proxy often suffices ≈1 credit/page).
-Free-tier caps: per-plan ceilings (`maxSerperQueries`, `maxFirecrawlScrapes`) mirroring the
-existing `maxSearches` pattern; Pro gets headroom. All counts logged into `PlanDiagnostics`.
+
+**Rate-limit safety is bounded concurrency, not an item cap.** The discovery pre-pass runs
+through a fixed-size pool (`DISCOVERY_CONCURRENCY = 5`, tuned under Tavily's ~100 req/min dev
+limit). Each provider leg is independently timeout-bounded (Serper/Tavily 8s, directFetch 6s,
+Firecrawl 9s) so no item can stall the pool. Provider 429s degrade gracefully — clients return
+`[]`/`null`, the item falls to `shopping_index` or the LLM path; never a wrong price.
+
+**Pro is NOT item-capped** — every line on a pro list gets the verified-price upgrade (matches
+the established "pro = unlimited, free = bounded" tier philosophy, commit `fa5288b`). The free
+tier has a cost-only ceiling (`FREE_DISCOVERY_LIMIT = 50` items/run): overflow items still
+appear in the plan, they just use the cheaper LLM fallback rather than the paid discovery legs.
+The 24h store-scoped cache makes repeat items free. All counts logged into
+`PlanDiagnostics.discovery`.
 
 ### Acceptance
 

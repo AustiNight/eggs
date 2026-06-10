@@ -16,10 +16,15 @@ export class TavilyClient {
   constructor(
     private apiKey: string,
     /** Arrow wrapper avoids "Illegal invocation" on Cloudflare Workers. */
-    private fetchImpl: typeof fetch = (input, init) => fetch(input, init)
+    private fetchImpl: typeof fetch = (input, init) => fetch(input, init),
+    /** Per-request timeout (ms). Bounds the leg so a hung request can't stall
+     *  the discovery pool slot. */
+    private timeoutMs = 8000
   ) {}
 
   async search(query: string, opts: TavilySearchOptions = {}): Promise<TavilyResult[]> {
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), this.timeoutMs)
     try {
       const res = await this.fetchImpl('https://api.tavily.com/search', {
         method: 'POST',
@@ -30,6 +35,7 @@ export class TavilyClient {
           max_results: opts.maxResults ?? 5,
           ...(opts.includeDomains?.length ? { include_domains: opts.includeDomains } : {}),
         }),
+        signal: controller.signal,
       })
       if (!res.ok) {
         const errBody = await res.text().catch(() => '<unreadable>')
@@ -43,6 +49,8 @@ export class TavilyClient {
     } catch (err) {
       console.warn('[tavily] search threw', err instanceof Error ? err.message : err)
       return []
+    } finally {
+      clearTimeout(t)
     }
   }
 }

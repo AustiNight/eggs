@@ -974,17 +974,27 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   diagnostics.ai.proofUrlsContentVerified = totalChecked - rejected
   diagnostics.ai.proofUrlsContentRejected = rejected
 
-  // ── WS1: store-bound price discovery pre-pass (parallel, per-item capped) ───
-  // Mirrors the size-resolver concurrency pattern (Promise.all + per-item race
-  // ceiling) so total wall time stays under the edge timeout. Skipped entirely
-  // when SERPER_API_KEY is absent. Results keyed `${bannerKey}::${ingredientId}`.
+  // ── WS1: store-bound price discovery pre-pass ──────────────────────────────
+  // Rate-limit safety is the bounded-concurrency POOL, not an item cap: at most
+  // DISCOVERY_CONCURRENCY items are in flight at once, and each provider leg
+  // (Serper/Tavily 8s, directFetch 6s, Firecrawl 9s) is independently
+  // timeout-bounded, so no item can stall the pool. Provider 429s degrade
+  // gracefully (clients return []/null → shopping_index / LLM fallback; never a
+  // wrong price). Pro lists are NOT item-capped — every line gets the verified-
+  // price upgrade (matches the "pro = unlimited" tier philosophy). The free cap
+  // is cost protection only: overflow items still appear, just via the cheaper
+  // LLM path. Skipped entirely when SERPER_API_KEY is absent.
   const discoveryDeps = buildDiscoveryDeps(c.env, diagnostics.discovery)
   const discoveredByKey = new Map<string, DiscoveredPrice>()
   if (discoveryDeps) {
     const isProDiscovery = user?.subscription_tier === 'pro'
-    const maxDiscoveryItems = isProDiscovery ? 60 : 24
+    // Concurrency tuned to stay under the tightest provider rate limit in the
+    // common path (Tavily dev key ~100 req/min); Firecrawl only fires on
+    // bot-wall fallback and self-limits via its own 429 handling.
+    const DISCOVERY_CONCURRENCY = 5
+    // Free-tier cost ceiling (not a list-length limit). Pro is uncapped.
+    const FREE_DISCOVERY_LIMIT = 50
     const locationLabel = user?.default_location_label ?? undefined
-    const DISCOVERY_PER_ITEM_TIMEOUT_MS = 10000
 
     const discoveryCandidates: Array<{ key: string; storeIdentity: StoreIdentity; ingredientName: string }> = []
     for (const aiStore of aiStorePlans) {
@@ -998,19 +1008,19 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
         discoveryCandidates.push({ key, storeIdentity, ingredientName: ingredient?.name ?? item.name })
       }
     }
-    const capped = discoveryCandidates.slice(0, maxDiscoveryItems)
-    if (capped.length < discoveryCandidates.length) {
-      console.log('[discovery] capped at', maxDiscoveryItems, 'of', discoveryCandidates.length, 'candidates')
+    const toRun = isProDiscovery
+      ? discoveryCandidates
+      : discoveryCandidates.slice(0, FREE_DISCOVERY_LIMIT)
+    if (toRun.length < discoveryCandidates.length) {
+      console.log('[discovery] free-tier cost cap:', toRun.length, 'of', discoveryCandidates.length,
+        'items upgraded; overflow uses LLM fallback')
     }
     await runPooled(
-      capped.map(({ key, storeIdentity, ingredientName }) => async () => {
-        const result = await Promise.race([
-          discoverPrice(ingredientName, storeIdentity, locationLabel, discoveryDeps),
-          new Promise<null>(resolve => setTimeout(() => resolve(null), DISCOVERY_PER_ITEM_TIMEOUT_MS)),
-        ])
+      toRun.map(({ key, storeIdentity, ingredientName }) => async () => {
+        const result = await discoverPrice(ingredientName, storeIdentity, locationLabel, discoveryDeps)
         if (result) discoveredByKey.set(key, result)
       }),
-      6,
+      DISCOVERY_CONCURRENCY,
     )
   }
 

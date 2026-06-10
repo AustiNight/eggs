@@ -14,15 +14,22 @@ export interface ShoppingCandidate {
 export class SerperClient {
   constructor(
     private apiKey: string,
-    private fetchImpl: typeof fetch = (input, init) => fetch(input, init)
+    private fetchImpl: typeof fetch = (input, init) => fetch(input, init),
+    /** Per-request timeout (ms). Bounds the leg so a hung request can't stall
+     *  the discovery pool slot — this is how we stay responsive, not an
+     *  artificial per-item cap upstream. */
+    private timeoutMs = 8000
   ) {}
 
   async shopping(query: string, locationLabel?: string): Promise<ShoppingCandidate[]> {
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), this.timeoutMs)
     try {
       const res = await this.fetchImpl('https://google.serper.dev/shopping', {
         method: 'POST',
         headers: { 'X-API-KEY': this.apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({ q: query, ...(locationLabel ? { location: locationLabel } : {}), num: 10 }),
+        signal: controller.signal,
       })
       if (!res.ok) {
         const errBody = await res.text().catch(() => '<unreadable>')
@@ -39,6 +46,8 @@ export class SerperClient {
     } catch (err) {
       console.warn('[serper] shopping threw', err instanceof Error ? err.message : err)
       return []
+    } finally {
+      clearTimeout(t)
     }
   }
 
