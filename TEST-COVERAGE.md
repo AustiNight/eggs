@@ -310,6 +310,14 @@
 | discoverPrice: returns null (never throws) when directFetch throws | Unit | ✅ | `src/lib/price-discovery.test.ts` | top-level safety — caller-supplied dep not contractually non-throwing; safe-outcome = null |
 | looksLikeProductPage: accepts real product URLs (H-E-B, Target /p/, Walmart /ip/, Sprouts /product/) | Unit | ✅ | `src/lib/price-discovery.test.ts` | per-domain coverage — exported heuristic |
 | looksLikeProductPage: rejects category/collections/storefront/search URLs (H-E-B, Target /c/, Sprouts /collections/) | Unit | ✅ | `src/lib/price-discovery.test.ts` | per-domain coverage — hardened reject pattern (collections, storefront) |
+| applyDiscoveryResult: store_page_verified → confidence 'real', proofUrl set, provenance + verifiedStoreId carried, lineTotal recomputed | Unit | ✅ | `src/routes/plan.ai.test.ts` | Task 9 honesty contract — only store-bound prices style as confident/verified |
+| applyDiscoveryResult: page_verified_unbound → 'estimated_with_source', product link kept, verifiedStoreId cleared | Unit | ✅ | `src/routes/plan.ai.test.ts` | online-price provenance, never store-bound |
+| applyDiscoveryResult: shopping_index → 'estimated_with_source', NO proofUrl, search-landing shopUrl | Unit | ✅ | `src/routes/plan.ai.test.ts` | search-landing URL never accompanies a confidently-styled price |
+| downgradeUnverified: unverified LLM item → 'estimated' + 'model_estimate' + search-landing shopUrl, proofUrl cleared | Unit | ✅ | `src/routes/plan.ai.test.ts` | replaces old estimated_with_source downgrade |
+| Kroger/Walmart matched item → provenance 'api' + verifiedAt | Integration | 📋 | `src/routes/plan.test.ts` | wired in plan route; assertion TODO |
+| Cache v2 store-scoped key (`item:v2:{banner}:{storeId|unbound}:{hash}`); v1 entries never re-read | Unit | 📋 | — | cacheKey/readCache/writeCache thread optional storeId; automation TODO |
+| AI store subtotal/tax/grandTotal recomputed from item lineTotals after discovery (LLM-emitted totals discarded) | Integration | 📋 | `src/routes/plan.test.ts` | discovery may change prices; assertion TODO |
+| Discovery pre-pass skipped entirely when SERPER_API_KEY absent (LLM path stands) | Integration | ✅ | `src/routes/plan.test.ts` | covered implicitly — test env has no SERPER_API_KEY, full plan still passes |
 
 Section grows as WS1 tasks land (plan wiring, UI).
 

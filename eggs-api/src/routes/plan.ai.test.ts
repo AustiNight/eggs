@@ -12,7 +12,9 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { validateAndNormalizeAiItems } from './plan.js'
+import { validateAndNormalizeAiItems, applyDiscoveryResult, downgradeUnverified } from './plan.js'
+import type { StoreItem, StoreIdentity } from '../types/index.js'
+import type { DiscoveredPrice } from '../lib/price-discovery.js'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -228,5 +230,48 @@ describe('validateAndNormalizeAiItems — edge cases', () => {
     expect(item.nonMemberPrice).toBe(4.29)
     expect(item.pricedSize).toEqual({ quantity: 64, unit: 'fl_oz' })
     expect(item.confidence).toBe('estimated_with_source')
+  })
+})
+
+// ── WS1: discovery-result mapping + honesty downgrade helpers ─────────────────
+const baseItem = (): StoreItem => ({
+  ingredientId: 'i1', name: 'chicken breast', quantity: 2, unit: 'lb',
+  unitPrice: 5.99, lineTotal: 11.98, confidence: 'real',
+  shopUrl: 'https://x', isLoyaltyPrice: false, pricedSize: { quantity: 1, unit: 'lb' },
+})
+const wsStore: StoreIdentity = { banner: 'H-E-B', bannerNormalized: 'h-e-b', storeName: 'H-E-B Plano', retailerStoreId: '790' }
+const ing = { quantity: 2, unit: 'lb' }
+
+describe('applyDiscoveryResult', () => {
+  it('store_page_verified → confidence real, proofUrl set, provenance + verifiedStoreId carried, lineTotal recomputed', () => {
+    const d: DiscoveredPrice = { unitPrice: 4.98, productTitle: 'HEB Chicken', productUrl: 'https://heb.com/p/1', provenance: 'store_page_verified', verifiedAt: 123, verifiedStoreId: '790' }
+    const item = applyDiscoveryResult(baseItem(), d, wsStore, ing)
+    expect(item).toMatchObject({ unitPrice: 4.98, confidence: 'real', provenance: 'store_page_verified', proofUrl: 'https://heb.com/p/1', shopUrl: 'https://heb.com/p/1', verifiedStoreId: '790', verifiedAt: 123 })
+    expect(item.lineTotal).toBeGreaterThan(0)
+  })
+  it('page_verified_unbound → estimated_with_source, product link kept, no verifiedStoreId', () => {
+    const d: DiscoveredPrice = { unitPrice: 4.98, productTitle: 'HEB', productUrl: 'https://heb.com/p/1', provenance: 'page_verified_unbound', verifiedAt: 123 }
+    const item = applyDiscoveryResult(baseItem(), d, wsStore, ing)
+    expect(item.confidence).toBe('estimated_with_source')
+    expect(item.shopUrl).toBe('https://heb.com/p/1')
+    expect(item.provenance).toBe('page_verified_unbound')
+    expect(item.verifiedStoreId).toBeUndefined()
+  })
+  it('shopping_index → estimated_with_source, NO proofUrl, search-landing shopUrl', () => {
+    const d: DiscoveredPrice = { unitPrice: 4.98, productTitle: 'HEB', productUrl: null, provenance: 'shopping_index', verifiedAt: 123 }
+    const item = applyDiscoveryResult(baseItem(), d, wsStore, ing)
+    expect(item.confidence).toBe('estimated_with_source')
+    expect(item.proofUrl).toBeUndefined()
+    expect(item.shopUrl).toContain('heb.com')
+  })
+})
+
+describe('downgradeUnverified', () => {
+  it('unverified LLM item → estimated + model_estimate + search-landing shopUrl, no proofUrl', () => {
+    const item = downgradeUnverified({ ...baseItem(), proofUrl: 'https://stale' }, 'H-E-B', 'chicken breast')
+    expect(item.confidence).toBe('estimated')
+    expect(item.provenance).toBe('model_estimate')
+    expect(item.proofUrl).toBeUndefined()
+    expect(item.shopUrl).toContain('heb.com')
   })
 })

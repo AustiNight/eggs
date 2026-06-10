@@ -10,7 +10,8 @@ import type {
   CanonicalUnit,
   UserProfile,
   ClarifiedAttributes,
-  PlanDiagnostics
+  PlanDiagnostics,
+  StoreIdentity
 } from '../types/index.js'
 import { CANONICAL_UNITS, validateSpecInput } from '../types/spec.js'
 import type { ShoppableItemSpec } from '../types/spec.js'
@@ -39,6 +40,10 @@ import { verifyProductContent } from '../lib/content-verifier.js'
 import type { StoreSearchResult } from '../integrations/StoreAdapter.js'
 import { buildNarrativePrompt, fallbackNarrative } from './plan-narrative.js'
 import type { NarrativeFacts } from './plan-narrative.js'
+import { discoverPrice, type DiscoveredPrice, type DiscoveryDeps } from '../lib/price-discovery.js'
+import { SerperClient } from '../integrations/serper.js'
+import { TavilyClient } from '../integrations/tavily.js'
+import { FirecrawlClient } from '../integrations/firecrawl.js'
 
 const plan = new Hono<HonoEnv>()
 
@@ -85,6 +90,7 @@ interface CachedStoreItem {
   storeName: string
   storeBanner: string
   storeAddress?: string
+  storeId?: string
   priceSource: 'ai_estimated'
   cachedAt: number
 }
@@ -95,10 +101,13 @@ async function sha256Hex(input: string): Promise<string> {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-async function cacheKey(bannerNormalized: string, ingredientName: string): Promise<string> {
+async function cacheKey(bannerNormalized: string, ingredientName: string, storeId?: string): Promise<string> {
   const normalized = ingredientName.trim().toLowerCase().replace(/\s+/g, ' ')
   const hash = await sha256Hex(normalized)
-  return `item:v1:${bannerNormalized.replace(/\s+/g, '-')}:${hash.slice(0, 24)}`
+  // v2: store-scoped. v1 entries (no provenance) are never read again — they
+  // expire via their own 24h TTL. storeId is 'unbound' until locator adapters
+  // resolve retailerStoreId (Task 7 follow-up); read + write must agree on it.
+  return `item:v2:${bannerNormalized.replace(/\s+/g, '-')}:${storeId ?? 'unbound'}:${hash.slice(0, 24)}`
 }
 
 // ── Kroger: search all ingredients across nearby locations ──────────────────
@@ -234,6 +243,73 @@ export function validateAndNormalizeAiItems(rawItems: unknown[]): StoreItem[] {
 
     return { ...item, pricedSize, confidence } as StoreItem
   }).filter((item): item is StoreItem => item !== null)
+}
+
+// ── WS1 honesty contract: map a discovery result onto a StoreItem ────────────
+export function applyDiscoveryResult(
+  item: StoreItem,
+  d: DiscoveredPrice,
+  store: StoreIdentity,
+  ingredient: { quantity: number; unit: string } | undefined,
+): StoreItem {
+  const verified = d.provenance === 'store_page_verified'
+  const lineTotal = ingredient
+    ? computeLineTotal(d.unitPrice, ingredient, item.pricedSize)
+    : Math.round(d.unitPrice * 100) / 100
+  return {
+    ...item,
+    unitPrice: d.unitPrice,
+    lineTotal,
+    confidence: verified ? 'real' : 'estimated_with_source',
+    provenance: d.provenance,
+    verifiedAt: d.verifiedAt,
+    verifiedStoreId: verified ? d.verifiedStoreId : undefined,
+    proofUrl: d.productUrl ?? undefined,
+    productUrl: d.productUrl ?? undefined,
+    shopUrl: d.productUrl ?? getShopUrl(store.banner, item.name),
+  }
+}
+
+// Spec: "search-landing URLs never accompany a confidently-styled price."
+// Replaces the old confidence='estimated_with_source' downgrade.
+export function downgradeUnverified(item: StoreItem, banner: string, ingredientName: string): StoreItem {
+  return {
+    ...item,
+    confidence: 'estimated',
+    provenance: 'model_estimate',
+    proofUrl: undefined,
+    productUrl: undefined,
+    verifiedStoreId: undefined,
+    shopUrl: getShopUrl(banner, ingredientName),
+  }
+}
+
+// Build the injected discovery deps from env; null when SERPER_API_KEY absent
+// (whole discovery pre-pass is then skipped and the LLM path stands).
+export function buildDiscoveryDeps(
+  env: HonoEnv['Bindings'],
+  counters: PlanDiagnostics['discovery'],
+): DiscoveryDeps | null {
+  if (!env.SERPER_API_KEY) return null
+  return {
+    serper: new SerperClient(env.SERPER_API_KEY),
+    tavily: env.TAVILY_API_KEY ? new TavilyClient(env.TAVILY_API_KEY) : undefined,
+    firecrawl: env.FIRECRAWL_API_KEY ? new FirecrawlClient(env.FIRECRAWL_API_KEY) : undefined,
+    directFetch: async (url, headers) => {
+      try {
+        const controller = new AbortController()
+        const t = setTimeout(() => controller.abort(), 6000)
+        const res = await fetch(url, {
+          headers: { 'user-agent': 'Mozilla/5.0 (compatible; EggsBot/1.0)', ...headers },
+          signal: controller.signal,
+        })
+        clearTimeout(t)
+        if (!res.ok) return null
+        return await res.text()
+      } catch { return null }
+    },
+    counters,
+  }
 }
 
 // ── AI: search all non-API stores for ALL ingredients (cache-first) ──────────
@@ -502,12 +578,12 @@ Emit the shopping plan now via record_shopping_plan.`
 
 async function readCache(
   env: HonoEnv['Bindings'],
-  pairs: Array<{ banner: string; ingredient: IngredientLine }>
+  pairs: Array<{ banner: string; ingredient: IngredientLine; storeId?: string }>
 ): Promise<Map<string, CachedStoreItem>> {
   const hits = new Map<string, CachedStoreItem>()
   await Promise.all(
-    pairs.map(async ({ banner, ingredient }) => {
-      const key = await cacheKey(banner, ingredient.name)
+    pairs.map(async ({ banner, ingredient, storeId }) => {
+      const key = await cacheKey(banner, ingredient.name, storeId)
       try {
         const raw = await env.URL_CACHE.get(key)
         if (!raw) return
@@ -523,11 +599,11 @@ async function readCache(
 
 async function writeCache(
   env: HonoEnv['Bindings'],
-  entries: Array<{ banner: string; ingredient: IngredientLine; value: CachedStoreItem }>
+  entries: Array<{ banner: string; ingredient: IngredientLine; storeId?: string; value: CachedStoreItem }>
 ): Promise<void> {
   await Promise.all(
-    entries.map(async ({ banner, ingredient, value }) => {
-      const key = await cacheKey(banner, ingredient.name)
+    entries.map(async ({ banner, ingredient, storeId, value }) => {
+      const key = await cacheKey(banner, ingredient.name, storeId)
       try {
         await env.URL_CACHE.put(key, JSON.stringify(value), { expirationTtl: 86400 })
       } catch {
@@ -706,6 +782,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           proofUrl: kr.productUrl,
           isLoyaltyPrice: kr.promoPrice !== null && kr.promoPrice < kr.regularPrice,
           nonMemberPrice: kr.promoPrice !== null ? kr.regularPrice : undefined,
+          provenance: 'api',
+          verifiedAt: Date.now(),
           pricedSize: krPricedSize
         })
       } else {
@@ -772,6 +850,8 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
           proofUrl: wm.productUrl,
           isLoyaltyPrice: wm.promoPrice !== null && wm.promoPrice < wm.regularPrice,
           nonMemberPrice: wm.promoPrice !== null ? wm.regularPrice : undefined,
+          provenance: 'api',
+          verifiedAt: Date.now(),
           pricedSize: wmPricedSize
         })
       } else {
@@ -817,11 +897,12 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
 
   // AI-sourced stores — pad, validate URLs, guarantee shopUrl on every item
   // ── Pre-pass: bring in any cached items we already resolved within 24h ──
-  const cacheLookupPairs: Array<{ banner: string; ingredient: IngredientLine }> = []
+  const cacheLookupPairs: Array<{ banner: string; ingredient: IngredientLine; storeId?: string }> = []
   for (const aiStore of aiStorePlans) {
     const bannerKey = aiStore.storeBannerNormalized ?? normalizeBanner(aiStore.storeBanner)
     for (const ingredient of ingredients) {
-      cacheLookupPairs.push({ banner: bannerKey, ingredient })
+      // TODO(Task-7): resolve retailerStoreId for store-scoped cache once locator adapters land
+      cacheLookupPairs.push({ banner: bannerKey, ingredient, storeId: undefined })
     }
   }
   const cacheHits = await readCache(c.env, cacheLookupPairs)
@@ -859,58 +940,120 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   diagnostics.ai.proofUrlsContentVerified = totalChecked - rejected
   diagnostics.ai.proofUrlsContentRejected = rejected
 
-  const cacheWrites: Array<{ banner: string; ingredient: IngredientLine; value: CachedStoreItem }> = []
+  // ── WS1: store-bound price discovery pre-pass (parallel, per-item capped) ───
+  // Mirrors the size-resolver concurrency pattern (Promise.all + per-item race
+  // ceiling) so total wall time stays under the edge timeout. Skipped entirely
+  // when SERPER_API_KEY is absent. Results keyed `${bannerKey}::${ingredientId}`.
+  const discoveryDeps = buildDiscoveryDeps(c.env, diagnostics.discovery)
+  const discoveredByKey = new Map<string, DiscoveredPrice>()
+  if (discoveryDeps) {
+    const isProDiscovery = user?.subscription_tier === 'pro'
+    const maxDiscoveryItems = isProDiscovery ? 60 : 24
+    const locationLabel = user?.default_location_label ?? undefined
+    const DISCOVERY_PER_ITEM_TIMEOUT_MS = 10000
+
+    const discoveryCandidates: Array<{ key: string; storeIdentity: StoreIdentity; ingredientName: string }> = []
+    for (const aiStore of aiStorePlans) {
+      const bannerKey = aiStore.storeBannerNormalized ?? normalizeBanner(aiStore.storeBanner)
+      const storeIdentity: StoreIdentity = {
+        banner: aiStore.storeBanner,
+        bannerNormalized: bannerKey,
+        storeName: aiStore.storeName,
+        storeAddress: aiStore.storeAddress,
+        distanceMiles: aiStore.distanceMiles,
+      }
+      for (const item of aiStore.items) {
+        if (item.notAvailable) continue
+        const key = `${bannerKey}::${item.ingredientId}`
+        if (cacheHits.has(key)) continue
+        const ingredient = ingredients.find(i => i.id === item.ingredientId)
+        discoveryCandidates.push({ key, storeIdentity, ingredientName: ingredient?.name ?? item.name })
+      }
+    }
+    const capped = discoveryCandidates.slice(0, maxDiscoveryItems)
+    if (capped.length < discoveryCandidates.length) {
+      console.log('[discovery] capped at', maxDiscoveryItems, 'of', discoveryCandidates.length, 'candidates')
+    }
+    await Promise.all(capped.map(async ({ key, storeIdentity, ingredientName }) => {
+      const result = await Promise.race([
+        discoverPrice(ingredientName, storeIdentity, locationLabel, discoveryDeps),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), DISCOVERY_PER_ITEM_TIMEOUT_MS)),
+      ])
+      if (result) discoveredByKey.set(key, result)
+    }))
+  }
+
+  const cacheWrites: Array<{ banner: string; ingredient: IngredientLine; storeId?: string; value: CachedStoreItem }> = []
 
   for (const aiStore of aiStorePlans) {
     const bannerKey = aiStore.storeBannerNormalized ?? normalizeBanner(aiStore.storeBanner)
     const foundIds = new Set(aiStore.items.map(i => i.ingredientId))
+    const storeIdentity: StoreIdentity = {
+      banner: aiStore.storeBanner,
+      bannerNormalized: bannerKey,
+      storeName: aiStore.storeName,
+      storeAddress: aiStore.storeAddress,
+      distanceMiles: aiStore.distanceMiles,
+    }
 
-    // Reconcile each AI-returned item
     for (const item of aiStore.items) {
       const ingredient = ingredients.find(i => i.id === item.ingredientId)
       const ingredientName = ingredient?.name ?? item.name
+      const key = `${bannerKey}::${item.ingredientId}`
 
-      // Check cache first — cache wins over AI result (24h TTL means it's recent)
-      const cacheHit = cacheHits.get(`${bannerKey}::${item.ingredientId}`)
+      // Cache wins (24h fresh, store-scoped). Carries provenance + verifiedAt.
+      const cacheHit = cacheHits.get(key)
       if (cacheHit) {
         Object.assign(item, cacheHit.item, {
           ingredientId: item.ingredientId,
           pricedSize: cacheHit.item.pricedSize ?? null,
         })
+        if (!item.provenance) Object.assign(item, downgradeUnverified(item, aiStore.storeBanner, ingredientName))
         continue
       }
 
-      // Reconcile URLs: proofUrl only if HEAD-validated AND content-verified
-      const urlOk = item.proofUrl && verifiedUrls.has(item.proofUrl)
-      const contentOk = item.proofUrl ? verifiedContentByUrl.get(item.proofUrl) === true : false
-      if (urlOk && contentOk) {
-        item.productUrl = item.proofUrl
-        item.shopUrl = item.proofUrl as string
+      // WS1 discovery upgrade.
+      const discovered = discoveredByKey.get(key)
+      if (discovered) {
+        Object.assign(item, applyDiscoveryResult(item, discovered, storeIdentity, ingredient))
       } else {
-        item.proofUrl = undefined
-        item.productUrl = undefined
-        item.shopUrl = getShopUrl(aiStore.storeBanner, ingredientName)
-        if (item.confidence === 'real') item.confidence = 'estimated_with_source'
+        // Fall back to the LLM's own claim — keep confident ONLY if its proofUrl
+        // passed HEAD + content checks. LLM fetches are never store-bound → cap
+        // at page_verified_unbound; otherwise downgrade to an honest estimate.
+        const urlOk = item.proofUrl && verifiedUrls.has(item.proofUrl)
+        const contentOk = item.proofUrl ? verifiedContentByUrl.get(item.proofUrl) === true : false
+        if (urlOk && contentOk) {
+          item.productUrl = item.proofUrl
+          item.shopUrl = item.proofUrl as string
+          item.provenance = 'page_verified_unbound'
+          item.verifiedAt = Date.now()
+          if (item.confidence === 'real') item.confidence = 'estimated_with_source'
+        } else {
+          diagnostics.discovery.fallbackLlm++
+          Object.assign(item, downgradeUnverified(item, aiStore.storeBanner, ingredientName))
+        }
       }
 
-      // Persist the resolved item to cache for 24h — future requests skip the AI entirely
+      // Persist resolved item to cache for 24h (store-scoped).
       if (ingredient && !item.notAvailable && item.unitPrice > 0) {
         cacheWrites.push({
           banner: bannerKey,
+          storeId: storeIdentity.retailerStoreId,
           ingredient,
           value: {
             item: { ...item },
             storeName: aiStore.storeName,
             storeBanner: aiStore.storeBanner,
             storeAddress: aiStore.storeAddress,
+            storeId: storeIdentity.retailerStoreId,
             priceSource: 'ai_estimated',
-            cachedAt: Date.now()
-          }
+            cachedAt: Date.now(),
+          },
         })
       }
     }
 
-    // Pad items the AI didn't return — still guarantee a shopUrl
+    // Pad items the AI didn't return — still guarantee a shopUrl (UNCHANGED block)
     for (const ingredient of ingredients) {
       if (!foundIds.has(ingredient.id)) {
         aiStore.items.push({
@@ -932,6 +1075,15 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
         })
       }
     }
+
+    // WS1: recompute store totals from items — discovery may have changed prices,
+    // and the LLM's emitted subtotal/tax/grandTotal are now stale.
+    const availForTotals = aiStore.items.filter(i => !i.notAvailable)
+    const sub = Math.round(availForTotals.reduce((s, i) => s + i.lineTotal, 0) * 100) / 100
+    const tax = Math.round(sub * 0.0825 * 100) / 100
+    aiStore.subtotal = sub
+    aiStore.estimatedTax = tax
+    aiStore.grandTotal = Math.round((sub + tax) * 100) / 100
 
     aiStore.storeBannerNormalized = bannerKey
     allStores.push(aiStore)
