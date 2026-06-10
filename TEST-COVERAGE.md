@@ -318,6 +318,8 @@
 | Cache v2 store-scoped key (`item:v2:{banner}:{storeId|unbound}:{hash}`); v1 entries never re-read | Unit | 📋 | — | cacheKey/readCache/writeCache thread optional storeId; automation TODO |
 | AI store subtotal/tax/grandTotal recomputed from item lineTotals after discovery (LLM-emitted totals discarded) | Integration | 📋 | `src/routes/plan.test.ts` | discovery may change prices; assertion TODO |
 | Discovery pre-pass skipped entirely when SERPER_API_KEY absent (LLM path stands) | Integration | ✅ | `src/routes/plan.test.ts` | covered implicitly — test env has no SERPER_API_KEY, full plan still passes |
+| runPooled: bounded-concurrency runner caps in-flight discovery tasks (≤6) under Cloudflare connection/subrequest ceiling | Unit | 📋 | `src/routes/plan.ts` | order-preserving, never rejects; replaces unbounded Promise.all fan-out on discovery pre-pass; automation TODO |
+| Post-resolution global recompute: lineTotals + store subtotal/tax/grandTotal recomputed AFTER size-resolver, BEFORE best-basket selector | Integration | 📋 | `src/routes/plan.test.ts` | corrects AI items whose pricedSize resolved after reconcile set a single-unit lineTotal; idempotent for Kroger/Walmart; supersedes in-loop recompute; assertion TODO |
 
 Section grows as WS1 tasks land (plan wiring, UI).
 

@@ -81,6 +81,23 @@ export function computeLineTotal(
   return Math.round(unitPrice * packagesNeeded * 100) / 100
 }
 
+// Bounded-concurrency runner — caps simultaneous in-flight tasks so a large
+// fan-out (e.g. discovery's 3-subrequest items) stays under Cloudflare's
+// connection/subrequest ceilings. Order-preserving, never rejects (callers
+// handle their own errors).
+export async function runPooled<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {
+  const results: T[] = new Array(tasks.length)
+  let next = 0
+  async function worker() {
+    while (next < tasks.length) {
+      const idx = next++
+      results[idx] = await tasks[idx]()
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker))
+  return results
+}
+
 // ── Cache helpers ────────────────────────────────────────────────────────────
 // Cache key shape: item:v1:{banner-slug}:{sha256(ingredient)}
 // Cache value: { storeItem, cachedAt }. Entries expire after 24h.
@@ -897,12 +914,29 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
 
   // AI-sourced stores — pad, validate URLs, guarantee shopUrl on every item
   // ── Pre-pass: bring in any cached items we already resolved within 24h ──
+  // Build StoreIdentity once per AI store — reused for cache keys, the discovery
+  // pre-pass, and the reconcile loop (single source of truth so storeId stays
+  // consistent between cache read and write when locator adapters land).
+  const storeIdentityByBanner = new Map<string, StoreIdentity>()
+  for (const aiStore of aiStorePlans) {
+    const bannerKey = aiStore.storeBannerNormalized ?? normalizeBanner(aiStore.storeBanner)
+    if (!storeIdentityByBanner.has(bannerKey)) {
+      storeIdentityByBanner.set(bannerKey, {
+        banner: aiStore.storeBanner,
+        bannerNormalized: bannerKey,
+        storeName: aiStore.storeName,
+        storeAddress: aiStore.storeAddress,
+        distanceMiles: aiStore.distanceMiles,
+      })
+    }
+  }
+
   const cacheLookupPairs: Array<{ banner: string; ingredient: IngredientLine; storeId?: string }> = []
   for (const aiStore of aiStorePlans) {
     const bannerKey = aiStore.storeBannerNormalized ?? normalizeBanner(aiStore.storeBanner)
+    const storeId = storeIdentityByBanner.get(bannerKey)?.retailerStoreId
     for (const ingredient of ingredients) {
-      // TODO(Task-7): resolve retailerStoreId for store-scoped cache once locator adapters land
-      cacheLookupPairs.push({ banner: bannerKey, ingredient, storeId: undefined })
+      cacheLookupPairs.push({ banner: bannerKey, ingredient, storeId })
     }
   }
   const cacheHits = await readCache(c.env, cacheLookupPairs)
@@ -955,13 +989,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     const discoveryCandidates: Array<{ key: string; storeIdentity: StoreIdentity; ingredientName: string }> = []
     for (const aiStore of aiStorePlans) {
       const bannerKey = aiStore.storeBannerNormalized ?? normalizeBanner(aiStore.storeBanner)
-      const storeIdentity: StoreIdentity = {
-        banner: aiStore.storeBanner,
-        bannerNormalized: bannerKey,
-        storeName: aiStore.storeName,
-        storeAddress: aiStore.storeAddress,
-        distanceMiles: aiStore.distanceMiles,
-      }
+      const storeIdentity = storeIdentityByBanner.get(bannerKey)!
       for (const item of aiStore.items) {
         if (item.notAvailable) continue
         const key = `${bannerKey}::${item.ingredientId}`
@@ -974,13 +1002,16 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
     if (capped.length < discoveryCandidates.length) {
       console.log('[discovery] capped at', maxDiscoveryItems, 'of', discoveryCandidates.length, 'candidates')
     }
-    await Promise.all(capped.map(async ({ key, storeIdentity, ingredientName }) => {
-      const result = await Promise.race([
-        discoverPrice(ingredientName, storeIdentity, locationLabel, discoveryDeps),
-        new Promise<null>(resolve => setTimeout(() => resolve(null), DISCOVERY_PER_ITEM_TIMEOUT_MS)),
-      ])
-      if (result) discoveredByKey.set(key, result)
-    }))
+    await runPooled(
+      capped.map(({ key, storeIdentity, ingredientName }) => async () => {
+        const result = await Promise.race([
+          discoverPrice(ingredientName, storeIdentity, locationLabel, discoveryDeps),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), DISCOVERY_PER_ITEM_TIMEOUT_MS)),
+        ])
+        if (result) discoveredByKey.set(key, result)
+      }),
+      6,
+    )
   }
 
   const cacheWrites: Array<{ banner: string; ingredient: IngredientLine; storeId?: string; value: CachedStoreItem }> = []
@@ -988,13 +1019,7 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   for (const aiStore of aiStorePlans) {
     const bannerKey = aiStore.storeBannerNormalized ?? normalizeBanner(aiStore.storeBanner)
     const foundIds = new Set(aiStore.items.map(i => i.ingredientId))
-    const storeIdentity: StoreIdentity = {
-      banner: aiStore.storeBanner,
-      bannerNormalized: bannerKey,
-      storeName: aiStore.storeName,
-      storeAddress: aiStore.storeAddress,
-      distanceMiles: aiStore.distanceMiles,
-    }
+    const storeIdentity = storeIdentityByBanner.get(bannerKey)!
 
     for (const item of aiStore.items) {
       const ingredient = ingredients.find(i => i.id === item.ingredientId)
@@ -1075,15 +1100,6 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
         })
       }
     }
-
-    // WS1: recompute store totals from items — discovery may have changed prices,
-    // and the LLM's emitted subtotal/tax/grandTotal are now stale.
-    const availForTotals = aiStore.items.filter(i => !i.notAvailable)
-    const sub = Math.round(availForTotals.reduce((s, i) => s + i.lineTotal, 0) * 100) / 100
-    const tax = Math.round(sub * 0.0825 * 100) / 100
-    aiStore.subtotal = sub
-    aiStore.estimatedTax = tax
-    aiStore.grandTotal = Math.round((sub + tax) * 100) / 100
 
     aiStore.storeBannerNormalized = bannerKey
     allStores.push(aiStore)
@@ -1167,6 +1183,24 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   diagnostics.sizeResolver.resolved = resolvedCount
   diagnostics.sizeResolver.bySource = sizeBySource
   diagnostics.sizeResolver.failed = Math.max(0, sizeResolutionEligible - resolvedCount)
+
+  // WS1: now that pricedSize is resolved, recompute lineTotals (price × packages
+  // needed) and store totals. Idempotent for items whose pricedSize was already
+  // known (Kroger/Walmart); corrects AI items whose size resolved after the
+  // reconcile loop set a single-unit lineTotal.
+  for (const store of allStores) {
+    for (const item of store.items) {
+      if (item.notAvailable) continue
+      const ingredient = ingredients.find(i => i.id === item.ingredientId)
+      if (ingredient) item.lineTotal = computeLineTotal(item.unitPrice, ingredient, item.pricedSize)
+    }
+    const avail = store.items.filter(i => !i.notAvailable)
+    const sub = Math.round(avail.reduce((s, i) => s + i.lineTotal, 0) * 100) / 100
+    const tax = Math.round(sub * 0.0825 * 100) / 100
+    store.subtotal = sub
+    store.estimatedTax = tax
+    store.grandTotal = Math.round((sub + tax) * 100) / 100
+  }
 
   // Enforce maxStores
   const finalStores = allStores.slice(0, body.settings.maxStores)
