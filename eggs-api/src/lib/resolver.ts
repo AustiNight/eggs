@@ -16,6 +16,7 @@
 
 import type { ShoppableItemSpec } from '../types/spec.js'
 import { validateSpec, CANONICAL_UNITS } from '../types/spec.js'
+import type { CanonicalUnit } from '../types/index.js'
 import type { ModelProvider } from '../providers/index.js'
 import { SpecCache } from './specCache.js'
 import { stripUnitNoise } from './queryStrip.js'
@@ -175,8 +176,18 @@ function buildMessages(
 // Used on timeout / LLM error. Heuristically splits the raw text into a
 // best-effort spec with confidence:'low'.
 
+const VALID_UNITS = new Set<string>(CANONICAL_UNITS)
+
 export function naiveParse(rawText: string, id: string, priorTrace?: ResolutionTraceEntry[]): ShoppableItemSpec {
   const parsed = parseIngredient(rawText)
+
+  // parseIngredient returns `unit: string` — its alias table emits canonical
+  // units, but the trailing-parenthetical pattern can pass through arbitrary
+  // words.  Same guard pattern as validateAndNormalizeAiItems in routes/plan.ts:
+  // validate against CANONICAL_UNITS, fall back to the parser's own 'each' default.
+  const unit: CanonicalUnit = VALID_UNITS.has(parsed.unit)
+    ? (parsed.unit as CanonicalUnit)
+    : 'each'
 
   // Use parseIngredient for structured name/quantity/unit extraction.
   // stripUnitNoise is no longer needed — the parser handles unit removal from
@@ -189,7 +200,7 @@ export function naiveParse(rawText: string, id: string, priorTrace?: ResolutionT
     brand: null,
     brandLocked: false,
     quantity: parsed.quantity,
-    unit: parsed.unit,
+    unit,
     // Cap to 3 entries to match validateSpec.max(3) invariant.
     // A caller supplying 4+ entries would silently violate the zod schema otherwise.
     resolutionTrace: (priorTrace ?? []).slice(0, 3),

@@ -52,7 +52,7 @@ function mockDb(tier: 'free' | 'pro', plansCount: number, eventsCount: number) {
         }
       })
     })
-  } as ReturnType<typeof getSupabase>)
+  } as unknown as ReturnType<typeof getSupabase>)
 }
 
 describe('enforceFreeLimit', () => {

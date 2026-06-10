@@ -52,6 +52,7 @@ const { mockGetPriceForIngredient, mockFindNearbyLocations } =
 const MOCK_EXEC_CTX: ExecutionContext = {
   waitUntil: vi.fn(),
   passThroughOnException: vi.fn(),
+  props: {},
 }
 
 /** Minimal Cloudflare Worker env bindings for the plan route. */
@@ -148,7 +149,7 @@ function mockDb() {
         eq: () => ({ eq: () => Promise.resolve({ error: null }) }),
       }),
     }),
-  } as ReturnType<typeof getSupabase>)
+  } as unknown as ReturnType<typeof getSupabase>)
 }
 
 /** A fake Kroger location returned by findNearbyLocations. */
