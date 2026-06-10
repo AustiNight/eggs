@@ -13,6 +13,15 @@ interface PerStorePanelsProps {
   stores: StorePlan[]
 }
 
+/** WS1: human-readable age of a verification timestamp. */
+function formatAge(epochMs: number): string {
+  const diffMs = Date.now() - epochMs
+  const hours = diffMs / 3_600_000
+  if (hours < 1) return 'just now'
+  if (hours < 24) return `${Math.floor(hours)}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
 function ItemRow({ item }: { item: StoreItem }) {
   if (item.notAvailable) {
     return (
@@ -45,16 +54,25 @@ function ItemRow({ item }: { item: StoreItem }) {
               )}
             </span>
           )}
+          {(item.provenance === 'page_verified_unbound' || item.provenance === 'shopping_index') && (
+            <span className="text-[10px] text-slate-500 italic">online price — not confirmed for this store</span>
+          )}
+          {item.provenance === 'model_estimate' && (
+            <span className="text-[10px] text-slate-500 italic">estimate — no source found</span>
+          )}
+          {item.verifiedAt && (
+            <span className="text-[10px] text-slate-600">checked {formatAge(item.verifiedAt)}</span>
+          )}
         </div>
       </td>
       <td className="py-3 text-center text-slate-400">
         {item.quantity} <span className="text-slate-600 text-xs">{item.unit}</span>
       </td>
-      <td className="py-3 text-right font-mono text-amber-400/90 font-bold">
+      <td className={`py-3 text-right font-mono font-bold ${item.provenance === 'model_estimate' ? 'text-slate-500' : 'text-amber-400/90'}`}>
         ${item.unitPrice.toFixed(2)}
       </td>
       <td className="py-3 text-center">
-        <ConfidenceBadge confidence={item.confidence} />
+        <ConfidenceBadge confidence={item.confidence} provenance={item.provenance} />
       </td>
       <td className="py-3 text-right">
         {(() => {

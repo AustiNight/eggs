@@ -18,6 +18,7 @@ import LegacyPlanView from './LegacyPlanView'
 import BestBasketList from './BestBasketList'
 import CostBreakdownChart, { type StoreTotal } from './CostBreakdownChart'
 import PerStorePanels from './PerStorePanels'
+import VerifiedTotals from './VerifiedTotals'
 import DiagnosticsDisclosure from './DiagnosticsDisclosure'
 
 interface PlanResultProps {
@@ -171,6 +172,9 @@ function BestBasketView({ plan, winners, onReset, eventId, getToken }: BestBaske
           </div>
         )}
       </div>
+
+      {/* WS1: verified-vs-estimated total split */}
+      <VerifiedTotals stores={plan.stores} />
 
       {/* P4.1: Store-count shortfall notice */}
       {plan.summary.storeShortfall && (

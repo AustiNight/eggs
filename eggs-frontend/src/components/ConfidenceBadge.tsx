@@ -12,8 +12,22 @@ export const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   estimated:              { label: 'Est.',       color: '#94a3b8' },
 }
 
-export function ConfidenceBadge({ confidence }: { confidence: string }) {
-  const { label, color } = SOURCE_LABELS[confidence] ?? SOURCE_LABELS.estimated
+/**
+ * WS1 honesty labels — keyed by StoreItem.provenance. When provenance is present
+ * and known it wins over confidence; legacy plans without provenance fall back to
+ * SOURCE_LABELS.
+ */
+export const PROVENANCE_LABELS: Record<string, { label: string; color: string }> = {
+  api:                   { label: 'Verified',     color: '#34d399' },
+  store_page_verified:   { label: 'Verified',     color: '#34d399' },
+  page_verified_unbound: { label: 'Online price', color: '#fbbf24' },
+  shopping_index:        { label: 'Online price', color: '#fbbf24' },
+  model_estimate:        { label: 'Est.',         color: '#94a3b8' },
+}
+
+export function ConfidenceBadge({ confidence, provenance }: { confidence: string; provenance?: string }) {
+  const { label, color } =
+    (provenance && PROVENANCE_LABELS[provenance]) ?? SOURCE_LABELS[confidence] ?? SOURCE_LABELS.estimated
   return (
     <span
       className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded"
