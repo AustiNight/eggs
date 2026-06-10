@@ -320,8 +320,17 @@
 | Discovery pre-pass skipped entirely when SERPER_API_KEY absent (LLM path stands) | Integration | ✅ | `src/routes/plan.test.ts` | covered implicitly — test env has no SERPER_API_KEY, full plan still passes |
 | runPooled: bounded-concurrency runner caps in-flight discovery tasks (≤6) under Cloudflare connection/subrequest ceiling | Unit | 📋 | `src/routes/plan.ts` | order-preserving, never rejects; replaces unbounded Promise.all fan-out on discovery pre-pass; automation TODO |
 | Post-resolution global recompute: lineTotals + store subtotal/tax/grandTotal recomputed AFTER size-resolver, BEFORE best-basket selector | Integration | 📋 | `src/routes/plan.test.ts` | corrects AI items whose pricedSize resolved after reconcile set a single-unit lineTotal; idempotent for Kroger/Walmart; supersedes in-loop recompute; assertion TODO |
+| ConfidenceBadge — provenance → honesty label (api/store_page_verified→Verified, page_verified_unbound/shopping_index→Online price, model_estimate→Est.) + legacy confidence fallback | Unit | ✅ | `eggs-frontend/src/components/ConfidenceBadge.test.tsx` | additive UI |
+| VerifiedTotals.splitTotals — only api + store_page_verified count as verified; online/estimate/legacy count as estimated; skips notAvailable; component renders/omits | Unit | ✅ | `eggs-frontend/src/components/VerifiedTotals.test.tsx` | the defensible client-quote number |
+| PerStorePanels honesty UI (GATE) — verified/online/estimate render correct badge + subtext + de-emphasized estimate price + product-page link (verified) vs search-landing (estimate) | Integration | ✅ | `eggs-frontend/src/components/PerStorePanels.provenance.test.tsx` | end-to-end through the real component |
+| Store-binding spike — H-E-B real captured page binds to the rendered store, rejects a different store | Unit | ✅ | `src/integrations/store-binding.test.ts` | real-content fixture (spike 2026-06) |
+| Store-binding spike — H-E-B Dallas/Plano target NOT verified; recipe 'none' | Unit | ✅ | `src/integrations/store-binding.test.ts` | honest: no lever rebinds to chef's store |
+| Store-binding spike — Sprouts/Aldi unrecognized "Shopping at" indicator → unbound | Unit | ✅ | `src/integrations/store-binding.test.ts` | caps at page_verified_unbound |
+| Store-binding spike — Central Market bot-walled (hCaptcha) → unbound | Unit | ✅ | `src/integrations/store-binding.test.ts` | basic proxy can't pass; would need stealth |
 
 Section grows as WS1 tasks land (plan wiring, UI).
+
+**Spike outcome (2026-06):** no binding recipe cracked for any non-API banner — see `docs/superpowers/research/2026-06-store-binding-findings.md`. Non-API store prices therefore cap at `page_verified_unbound` ("Online price") until a deeper per-banner store-selection mechanism lands. Only Kroger/Walmart API prices reach `verified`.
 
 ---
 
