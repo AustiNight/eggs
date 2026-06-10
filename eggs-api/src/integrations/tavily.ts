@@ -4,6 +4,7 @@ export interface TavilyResult {
   url: string
   title: string
   content: string
+  score: number
 }
 
 export interface TavilySearchOptions {
@@ -14,6 +15,7 @@ export interface TavilySearchOptions {
 export class TavilyClient {
   constructor(
     private apiKey: string,
+    /** Arrow wrapper avoids "Illegal invocation" on Cloudflare Workers. */
     private fetchImpl: typeof fetch = (input, init) => fetch(input, init)
   ) {}
 
@@ -34,10 +36,10 @@ export class TavilyClient {
         console.warn('[tavily] search non-ok', res.status, errBody.slice(0, 200))
         return []
       }
-      const data = (await res.json()) as { results?: Array<{ url?: string; title?: string; content?: string }> }
+      const data = (await res.json()) as { results?: Array<{ url?: string; title?: string; content?: string; score?: number }> }
       return (data.results ?? [])
         .filter(r => typeof r.url === 'string')
-        .map(r => ({ url: r.url as string, title: r.title ?? '', content: r.content ?? '' }))
+        .map(r => ({ url: r.url as string, title: r.title ?? '', content: r.content ?? '', score: r.score ?? 0 }))
     } catch (err) {
       console.warn('[tavily] search threw', err instanceof Error ? err.message : err)
       return []

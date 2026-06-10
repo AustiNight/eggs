@@ -255,6 +255,24 @@
 
 ---
 
+## WS1 — Store-bound price discovery (2026-06)
+
+| Test Case | Type | Status | File | Notes |
+|-----------|------|--------|------|-------|
+| SerperClient: price parsing ($-preference, null) | Unit | ✅ | `src/integrations/serper.test.ts` | |
+| SerperClient: header/body wire format | Unit | ✅ | `src/integrations/serper.test.ts` | |
+| SerperClient: error degrade | Unit | ✅ | `src/integrations/serper.test.ts` | |
+| SerperClient: merchant filter guards | Unit | ✅ | `src/integrations/serper.test.ts` | |
+| TavilyClient: result mapping + score | Unit | ✅ | `src/integrations/tavily.test.ts` | |
+| TavilyClient: wire format | Unit | ✅ | `src/integrations/tavily.test.ts` | |
+| TavilyClient: include_domains omission | Unit | ✅ | `src/integrations/tavily.test.ts` | |
+| TavilyClient: error degrade | Unit | ✅ | `src/integrations/tavily.test.ts` | |
+| TavilyClient: url-less filtering | Unit | ✅ | `src/integrations/tavily.test.ts` | |
+
+Section grows as WS1 tasks land (firecrawl, store-binding, price-discovery, plan wiring, UI).
+
+---
+
 ## CI Matrix
 
 | Workflow | Trigger | Tests Included |

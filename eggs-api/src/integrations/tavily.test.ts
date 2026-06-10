@@ -18,6 +18,7 @@ describe('TavilyClient.search', () => {
     const out = await client.search('H-E-B Organics chicken', { includeDomains: ['heb.com'], maxResults: 5 })
     expect(out).toHaveLength(2)
     expect(out[0].url).toContain('product-detail')
+    expect(out[0].score).toBe(0.76)
   })
 
   it('sends bearer auth, include_domains and max_results', async () => {
