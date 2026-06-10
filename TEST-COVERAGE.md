@@ -1,6 +1,6 @@
 # E.G.G.S. Test Coverage Matrix
 
-**Last updated:** 2026-06-09  
+**Last updated:** 2026-06-10  
 **Rule:** Every new feature or change that may impact automated testing must update this file — even if the automation isn't written yet. The matrix is the source of truth for what tests *should* exist.
 
 ---
@@ -241,6 +241,25 @@
 | Pro tier shown correctly in settings | E2E | 📋 | 📋 | 📋 | 📋 | `e2e/settings.spec.ts` | |
 | Save settings updates profile | E2E | 📋 | 📋 | ➖ | ➖ | `e2e/settings.spec.ts` | |
 | Avoid stores/brands tags add and remove | E2E | 📋 | 📋 | ➖ | ➖ | `e2e/settings.spec.ts` | |
+
+---
+
+## Billing — Stripe Webhook (Backend)
+
+| Test Case | Type | Web | MWeb | iOS | And | File | Notes |
+|-----------|------|-----|------|-----|-----|------|-------|
+| Missing `stripe-signature` header → 400 | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ |
+| Signature verification failure → 400 | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ |
+| `checkout.session.completed` → tier pro + customer id + period end | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ |
+| Duplicate event id (idempotency) → no-op, `duplicate:true` | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ |
+| `checkout.session.completed` missing client_reference_id → no update, 200, idem key still set | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ Sec-review fix 3 |
+| `customer.subscription.updated` status active → tier pro + period end | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ Sec-review fix 1 |
+| `customer.subscription.updated` status past_due → tier pro (dunning grace) | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ Sec-review fix 1 |
+| `customer.subscription.updated` status canceled → tier free | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ Sec-review fix 1 |
+| `customer.subscription.deleted` → tier free | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ |
+| `customer.subscription.deleted` → clears subscription_period_end (null) | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ Sec-review fix 4 |
+| `updateByCustomer` no-match (untracked customer) → no update, 200, warn logged | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ Sec-review fix 2 |
+| Handler DB error → 500 AND idempotency key NOT written; retry reprocesses | Unit | ➖ | ➖ | ➖ | ➖ | `eggs-api/src/routes/billing.webhook.test.ts` | ✅ |
 
 ---
 
