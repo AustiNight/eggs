@@ -275,3 +275,28 @@ describe('downgradeUnverified', () => {
     expect(item.shopUrl).toContain('heb.com')
   })
 })
+
+import { dropApiCoveredAiStores } from './plan'
+
+describe('dropApiCoveredAiStores', () => {
+  const mk = (storeBanner: string) => ({ storeBanner } as any)
+  it('drops an AI store whose banner matches an API-covered banner exactly', () => {
+    const out = dropApiCoveredAiStores([mk('Kroger'), mk('Target')], ['Kroger', 'Walmart'])
+    expect(out.map(s => s.storeBanner)).toEqual(['Target'])
+  })
+  it('drops banner-family prefixes (Kroger Marketplace, Walmart Neighborhood Market)', () => {
+    const out = dropApiCoveredAiStores(
+      [mk('Kroger Marketplace'), mk('Walmart Neighborhood Market'), mk('H-E-B')],
+      ['Kroger', 'Walmart'],
+    )
+    expect(out.map(s => s.storeBanner)).toEqual(['H-E-B'])
+  })
+  it('keeps unrelated stores and is case/punctuation-insensitive', () => {
+    const out = dropApiCoveredAiStores([mk('kroger'), mk('Tom Thumb')], ['Kroger'])
+    expect(out.map(s => s.storeBanner)).toEqual(['Tom Thumb'])
+  })
+  it('no API stores → keeps everything', () => {
+    const out = dropApiCoveredAiStores([mk('Kroger'), mk('Aldi')], [])
+    expect(out).toHaveLength(2)
+  })
+})

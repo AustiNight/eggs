@@ -301,6 +301,24 @@ export function downgradeUnverified(item: StoreItem, banner: string, ingredientN
   }
 }
 
+// Deterministically drop any AI-researched store that's already covered by a
+// direct-API integration (Kroger, Walmart). The pass-1 prompt asks the model to
+// skip these, but LLMs don't reliably obey "do not include X" — so we filter on
+// the way out. Matches a banner family by normalized prefix: an AI "Kroger" or
+// "Kroger Marketplace" is dropped when "Kroger" is API-covered.
+export function dropApiCoveredAiStores<T extends { storeBanner: string; storeBannerNormalized?: string }>(
+  aiStores: T[],
+  apiCoveredStores: string[],
+): T[] {
+  const covered = apiCoveredStores.map(s => normalizeBanner(s)).filter(Boolean)
+  return aiStores.filter(store => {
+    const nb = store.storeBannerNormalized ?? normalizeBanner(store.storeBanner)
+    const collides = covered.some(cb => nb === cb || nb.startsWith(cb + ' '))
+    if (collides) console.log('[plan] dropping AI store already covered by API:', store.storeBanner)
+    return !collides
+  })
+}
+
 // Build the injected discovery deps from env; null when SERPER_API_KEY absent
 // (whole discovery pre-pass is then skipped and the LLM path stands).
 export function buildDiscoveryDeps(
@@ -726,7 +744,12 @@ plan.post('/', requireAuthOrServiceKey, rateLimit, enforceFreeLimit, async (c) =
   // Unwrap Walmart items (search function now returns { items, ontologyFallback* })
   const walmartResult = walmartSearchResult ? walmartSearchResult.items : null
   const aiSearchResult = aiSearchOutcome.status === 'fulfilled' ? aiSearchOutcome.value : null
-  const aiStorePlans = aiSearchResult ? aiSearchResult.stores : []
+  // Drop AI stores that duplicate a direct-API store (e.g. the model returns
+  // "Kroger" despite being told to skip it) — keeps each banner on one card.
+  const aiStorePlans = dropApiCoveredAiStores(
+    aiSearchResult ? aiSearchResult.stores : [],
+    apiCoveredStores,
+  )
   const aiPass1Failed = aiSearchResult ? aiSearchResult.pass1Failed : aiSearchOutcome.status === 'rejected'
   const aiPass2Failed = aiSearchResult ? aiSearchResult.pass2Failed : false
 
