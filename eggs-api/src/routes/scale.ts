@@ -7,6 +7,23 @@ import { getProvider } from '../providers/index.js'
 
 const scale = new Hono<HonoEnv>()
 
+/**
+ * Best-effort extraction of a JSON object from an LLM response. Handles the
+ * common ways a model wraps JSON despite instructions: ```json fences, leading
+ * prose, or a prefilled leading "{". Returns the substring from the first "{"
+ * to the last "}" after stripping fences. Does NOT fix truncated JSON — that's
+ * what the larger maxTokens is for.
+ */
+export function extractJsonObject(raw: string): string {
+  let s = raw.trim()
+  // strip a leading ```json / ``` fence and a trailing ``` fence
+  s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+  const first = s.indexOf('{')
+  const last = s.lastIndexOf('}')
+  if (first !== -1 && last !== -1 && last > first) return s.slice(first, last + 1)
+  return s
+}
+
 // POST /api/scale-recipes
 // Input: { dishes: [{id, name, servings}], eventId?, storeToIngredientPool?: boolean }
 scale.post('/', requireAuth, rateLimit, async (c) => {
@@ -58,7 +75,10 @@ Rules:
         content: `Scale the following dishes and produce a consolidated ingredient list:\n\n${dishList}`
       }
     ],
-    maxTokens: 4096,
+    // Large events consolidate many dishes into ingredient lines each carrying a
+    // sources[] array — 4096 truncated the JSON mid-object. Haiku 4.5 supports
+    // far more; 16000 stays under the non-streaming HTTP-timeout threshold.
+    maxTokens: 16000,
     jsonMode: true
   })
   } catch (e) {
@@ -68,10 +88,20 @@ Rules:
 
   let ingredients: IngredientLine[]
   try {
-    const parsed = JSON.parse(result.content) as { ingredients: IngredientLine[] }
+    const parsed = JSON.parse(extractJsonObject(result.content)) as { ingredients: IngredientLine[] }
+    if (!Array.isArray(parsed.ingredients)) throw new Error('missing ingredients array')
     // Always assign fresh UUIDs to prevent AI-generated collisions
     ingredients = parsed.ingredients.map(i => ({ ...i, id: crypto.randomUUID() }))
-  } catch {
+  } catch (e) {
+    // Diagnostics so a recurrence is debuggable from the worker log: truncation
+    // shows stopReason 'max_tokens'; malformed output shows in the previews.
+    console.error('[scale] parse failed', {
+      reason: e instanceof Error ? e.message : String(e),
+      stopReason: result.stopReason,
+      len: result.content?.length,
+      head: result.content?.slice(0, 200),
+      tail: result.content?.slice(-200),
+    })
     return c.json({ error: 'Failed to parse AI response' }, 500)
   }
 
