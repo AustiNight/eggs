@@ -17,8 +17,10 @@ export class SerperClient {
     private fetchImpl: typeof fetch = (input, init) => fetch(input, init),
     /** Per-request timeout (ms). Bounds the leg so a hung request can't stall
      *  the discovery pool slot — this is how we stay responsive, not an
-     *  artificial per-item cap upstream. */
-    private timeoutMs = 8000
+     *  artificial per-item cap upstream. Raised to 30s after observing Serper
+     *  shopping calls intermittently aborting at 8s from the Worker edge;
+     *  Serper is the load-bearing discovery leg, so prefer waiting over losing it. */
+    private timeoutMs = 30000
   ) {}
 
   async shopping(query: string, locationLabel?: string): Promise<ShoppingCandidate[]> {
